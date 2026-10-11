@@ -25,6 +25,7 @@ import java.time.ZonedDateTime
 class DailyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         Ledger.get(applicationContext).postDueRecurring()
+        LeftWidget.refresh(applicationContext)
         if (Reminder.isOn(applicationContext)) Reminder.show(applicationContext)
         Daily.schedule(applicationContext, ExistingWorkPolicy.APPEND_OR_REPLACE)
         return Result.success()

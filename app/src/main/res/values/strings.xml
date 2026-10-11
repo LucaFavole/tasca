@@ -1,3 +1,4 @@
 <resources>
     <string name="widget_description">Add an expense with one tap, or by voice</string>
+    <string name="widget_left_description">What will be left this month after the regular payments still due</string>
 </resources>

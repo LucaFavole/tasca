@@ -110,6 +110,13 @@ interface LedgerDao {
     )
     fun categoryMonths(from: LocalDate, to: LocalDate, accountId: Long?): Flow<List<app.tasca.domain.CategoryMonth>>
 
+    @Query("SELECT COALESCE(SUM(amountCents), 0) FROM txn WHERE kind = :kind AND date BETWEEN :from AND :to")
+    suspend fun total(kind: TxnKind, from: LocalDate, to: LocalDate): Long
+
+    /** Emits on every change to transactions or regular payments; the value itself means nothing. */
+    @Query("SELECT (SELECT COUNT(*) FROM txn) + (SELECT COUNT(*) FROM recurring)")
+    fun ledgerChanges(): Flow<Int>
+
     @Query("SELECT * FROM recurring ORDER BY active DESC, name COLLATE NOCASE")
     fun recurringFlow(): Flow<List<Recurring>>
 

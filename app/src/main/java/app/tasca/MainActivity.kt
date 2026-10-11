@@ -46,6 +46,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -56,7 +61,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.work.WorkManager
+import app.tasca.data.Ledger
 import app.tasca.data.TxnKind
+import app.tasca.domain.Money
 import app.tasca.domain.Period
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.screens.AccountsScreen
@@ -70,12 +77,20 @@ import app.tasca.ui.screens.SettingsScreen
 import app.tasca.ui.screens.StatsScreen
 import app.tasca.ui.screens.StocksScreen
 import app.tasca.ui.theme.TascaTheme
+import java.util.Currency
 
 class TascaApp : Application() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
+        Money.currency = Currency.getInstance(getSharedPreferences("settings", Context.MODE_PRIVATE).getString("currency", "EUR")!!)
         WorkManager.getInstance(this).cancelUniqueWork("recurring")
         Daily.schedule(this)
+        scope.launch {
+            Ledger.get(this@TascaApp).dao.ledgerChanges().debounce(500).collect { LeftWidget.refresh(this@TascaApp) }
+        }
     }
 }
 

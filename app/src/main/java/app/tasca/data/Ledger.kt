@@ -11,6 +11,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.withTransaction
+import app.tasca.domain.MonthLeft
 import app.tasca.domain.Trade
 import app.tasca.domain.TradeSide
 import app.tasca.io.AccountSheetRow
@@ -20,6 +21,7 @@ import app.tasca.io.ParsedWorkbook
 import app.tasca.io.SheetRow
 import app.tasca.io.Yahoo
 import java.time.LocalDate
+import java.time.YearMonth
 
 @Database(
     entities = [Account::class, Category::class, Txn::class, Recurring::class, Budget::class, Holding::class, Quote::class],
@@ -71,6 +73,13 @@ class Ledger(private val db: AppDb) {
             if (cur != r) dao.upsertRecurring(cur)
         }
         count
+    }
+
+    suspend fun monthLeft(today: LocalDate = LocalDate.now()): MonthLeft {
+        val month = YearMonth.from(today)
+        val from = month.atDay(1)
+        val to = month.atEndOfMonth()
+        return MonthLeft.of(today, dao.total(TxnKind.INCOME, from, to), dao.total(TxnKind.EXPENSE, from, to), dao.activeRecurring())
     }
 
     /** Inserts or updates an account, giving a new one the next free code. */
