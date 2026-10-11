@@ -21,7 +21,7 @@ import app.tasca.io.ParsedWorkbook
 import app.tasca.io.SheetRow
 import app.tasca.io.Yahoo
 import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.coroutines.flow.first
 
 @Database(
     entities = [Account::class, Category::class, Txn::class, Recurring::class, Budget::class, Holding::class, Quote::class],
@@ -75,11 +75,10 @@ class Ledger(private val db: AppDb) {
         count
     }
 
-    suspend fun monthLeft(today: LocalDate = LocalDate.now()): MonthLeft {
-        val month = YearMonth.from(today)
-        val from = month.atDay(1)
-        val to = month.atEndOfMonth()
-        return MonthLeft.of(today, dao.total(TxnKind.INCOME, from, to), dao.total(TxnKind.EXPENSE, from, to), dao.activeRecurring())
+    /** What will be left this month in the main account, the oldest one not deleted; null when there is none. */
+    suspend fun monthLeft(today: LocalDate = LocalDate.now()): Pair<String, MonthLeft>? {
+        val main = dao.balances().first().firstOrNull { !it.deleted } ?: return null
+        return main.name to MonthLeft.of(today, main.id, main.balanceCents, dao.activeRecurring())
     }
 
     /** Inserts or updates an account, giving a new one the next free code. */
