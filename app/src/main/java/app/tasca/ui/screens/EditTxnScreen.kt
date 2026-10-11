@@ -76,7 +76,6 @@ import app.tasca.domain.Frequency
 import app.tasca.domain.Money
 import app.tasca.domain.ReceiptScan
 import app.tasca.domain.Spoken
-import app.tasca.domain.guessCategory
 import app.tasca.ui.rememberReceiptScanner
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.components.IconBubble
@@ -125,16 +124,18 @@ class TxnDraft(kind: TxnKind) {
         categoryId = s.categoryId; date = s.date; note = s.note
     }
 
-    /** Fills what the receipt showed and keeps the rest; returns false when no total was found. */
-    fun load(r: ReceiptScan, categories: List<Category>): Boolean {
+    /** Fills what the receipt showed and keeps the rest; returns what to double-check, or null. */
+    fun load(r: ReceiptScan, categories: List<Category>): String? {
         kind = TxnKind.EXPENSE
         r.amountCents?.let { expr = Money.plain(it).replace('.', ',') }
         r.date?.let { date = it }
-        r.store?.let { store ->
-            note = store
-            guessCategory(store.lowercase().split(' '), categories.filter { it.kind == CategoryKind.EXPENSE })?.let { categoryId = it.id }
+        r.store?.let { note = it }
+        r.categoryIn(categories)?.let { categoryId = it }
+        return when {
+            r.amountCents == null -> "Couldn't find the total: type it in"
+            !r.confident -> "Check the total: the receipt was hard to read"
+            else -> null
         }
-        return r.amountCents != null
     }
 
     fun toTxn(id: Long, recurringId: Long?) = Txn(
@@ -157,7 +158,7 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
     var reading by remember { mutableStateOf(false) }
     val scanReceipt = rememberReceiptScanner(onStart = { reading = true }) { r ->
         reading = false
-        if (r != null) error = if (draft.load(r, vm.categories.value)) null else "Couldn't find the total: type it in"
+        if (r != null) error = draft.load(r, vm.categories.value)
     }
 
     LaunchedEffect(txnId) {

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import app.tasca.domain.ReceiptLine
 import app.tasca.domain.ReceiptParser
 import app.tasca.domain.ReceiptScan
 import com.google.mlkit.vision.common.InputImage
@@ -56,7 +57,7 @@ private fun read(context: Context, uri: Uri, onResult: (ReceiptScan?) -> Unit) {
 }
 
 /** Rebuilds printed rows: a label and its amount are often recognised as separate blocks side by side. */
-private fun rows(text: Text): List<String> {
+private fun rows(text: Text): List<ReceiptLine> {
     val lines = text.textBlocks.flatMap { it.lines }.filter { it.boundingBox != null }.sortedBy { it.boundingBox!!.centerY() }
     val rows = mutableListOf<MutableList<Text.Line>>()
     for (line in lines) {
@@ -64,7 +65,9 @@ private fun rows(text: Text): List<String> {
         val ref = rows.lastOrNull()?.first()?.boundingBox
         if (ref != null && abs(box.centerY() - ref.centerY()) < ref.height() * 0.6) rows.last() += line else rows += mutableListOf(line)
     }
-    return rows.map { row -> row.sortedBy { it.boundingBox!!.left }.joinToString("  ") { it.text } }
+    return rows.map { row ->
+        ReceiptLine(row.sortedBy { it.boundingBox!!.left }.joinToString("  ") { it.text }, row.maxOf { it.boundingBox!!.height() })
+    }
 }
 
 private fun Context.activity(): Activity {
