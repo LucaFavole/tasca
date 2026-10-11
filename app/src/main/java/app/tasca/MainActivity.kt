@@ -1,10 +1,15 @@
 package app.tasca
 
+import android.Manifest
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
@@ -28,11 +33,15 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -42,12 +51,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.WorkerParameters
-import app.tasca.data.Ledger
 import app.tasca.data.TxnKind
 import app.tasca.domain.Period
 import app.tasca.ui.AppViewModel
@@ -62,24 +66,12 @@ import app.tasca.ui.screens.SettingsScreen
 import app.tasca.ui.screens.StatsScreen
 import app.tasca.ui.screens.StocksScreen
 import app.tasca.ui.theme.TascaTheme
-import java.util.concurrent.TimeUnit
 
 class TascaApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "recurring",
-            ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<RecurringWorker>(12, TimeUnit.HOURS).build(),
-        )
-    }
-}
-
-/** Records due regular payments even when the app isn't opened. */
-class RecurringWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
-        Ledger.get(applicationContext).postDueRecurring()
-        return Result.success()
+        WorkManager.getInstance(this).cancelUniqueWork("recurring")
+        Daily.schedule(this)
     }
 }
 
@@ -92,20 +84,46 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
+    /** Set when the reminder's "Add expense" opened the app; the UI opens the keypad and clears it. */
+    private val addRequested = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) handle(intent)
         setContent {
             val theme by vm.theme.collectAsStateWithLifecycle()
-            TascaTheme(theme) { AppRoot(vm) }
+            TascaTheme(theme) { AppRoot(vm, addRequested) }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    private fun handle(intent: Intent) {
+        if (!intent.hasExtra(Reminder.EXTRA_ADD)) return
+        NotificationManagerCompat.from(this).cancel(Reminder.ID)
+        if (intent.getBooleanExtra(Reminder.EXTRA_ADD, false)) addRequested.value = true
     }
 }
 
 @Composable
-private fun AppRoot(vm: AppViewModel) {
+private fun AppRoot(vm: AppViewModel, addRequested: MutableState<Boolean>) {
     val nav = rememberNavController()
+    LaunchedEffect(addRequested.value) {
+        if (addRequested.value) { addRequested.value = false; nav.navigate("txn") }
+    }
+    val context = LocalContext.current
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 33 && Reminder.isOn(context) && !Reminder.allowed(context) && !prefs.getBoolean("askedNotifications", false)) {
+            prefs.edit().putBoolean("askedNotifications", true).apply()
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val tab = Tab.entries.firstOrNull { it.route == route }

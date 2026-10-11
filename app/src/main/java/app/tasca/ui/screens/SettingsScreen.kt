@@ -1,5 +1,8 @@
 package app.tasca.ui.screens
 
+import android.Manifest
+import app.tasca.Reminder
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -95,6 +98,11 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
     val currency by vm.currency.collectAsStateWithLifecycle()
     var confirmErase by remember { mutableStateOf(false) }
     var editCurrency by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var reminder by remember { mutableStateOf(Reminder.isOn(context)) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) { reminder = false; Reminder.setOn(context, false) }
+    }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importExcel) }
     val exporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
@@ -128,6 +136,22 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
                     }
                     Spacer(Modifier.height(8.dp))
                     NavRow("Currency", currency) { editCurrency = true }
+                }
+            }
+            item {
+                SectionCard {
+                    ListItem(
+                        headlineContent = { Text("Daily reminder") },
+                        supportingContent = { Text("At 23:00, asks if you recorded the day's expenses") },
+                        trailingContent = {
+                            Switch(reminder, { on ->
+                                reminder = on
+                                Reminder.setOn(context, on)
+                                if (on && !Reminder.allowed(context)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            })
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
                 }
             }
             item {
