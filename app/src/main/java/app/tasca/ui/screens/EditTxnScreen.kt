@@ -71,6 +71,7 @@ import app.tasca.data.TxnKind
 import app.tasca.domain.Calc
 import app.tasca.domain.Frequency
 import app.tasca.domain.Money
+import app.tasca.domain.Spoken
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.kindColor
@@ -113,6 +114,11 @@ class TxnDraft(kind: TxnKind) {
         toAccountId = r.toAccountId; categoryId = r.categoryId; date = r.startDate; note = r.name
     }
 
+    fun load(s: Spoken) {
+        kind = s.kind; expr = s.amountCents?.let { Money.plain(it).replace('.', ',') }.orEmpty()
+        categoryId = s.categoryId; date = s.date; note = s.note
+    }
+
     fun toTxn(id: Long, recurringId: Long?) = Txn(
         id = id, kind = kind, amountCents = amount!!, date = date, accountId = accountId!!,
         toAccountId = if (kind == TxnKind.TRANSFER) toAccountId else null,
@@ -133,7 +139,10 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
 
     LaunchedEffect(txnId) {
         if (txnId != null) vm.txn(txnId)?.let { draft.load(it); recurringId = it.recurringId }
-        else draft.accountId = selected
+        else {
+            draft.accountId = selected
+            vm.spoken?.let { draft.load(it); vm.spoken = null }
+        }
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {

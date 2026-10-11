@@ -3,7 +3,9 @@ package app.tasca
 import android.Manifest
 import android.app.Application
 import android.content.Context
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.speech.RecognizerIntent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -43,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -84,8 +88,15 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
-    /** Set when the reminder's "Add expense" opened the app; the UI opens the keypad and clears it. */
+    /** Set when the widget or the reminder asks for the keypad; the UI opens it and clears the flag. */
     private val addRequested = mutableStateOf(false)
+    private val listen = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val heard = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: return@registerForActivityResult
+        lifecycleScope.launch {
+            vm.prepareSpoken(heard)
+            addRequested.value = true
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,9 +114,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent) {
-        if (!intent.hasExtra(Reminder.EXTRA_ADD)) return
+        val mode = QuickAdd.of(intent) ?: return
         NotificationManagerCompat.from(this).cancel(Reminder.ID)
-        if (intent.getBooleanExtra(Reminder.EXTRA_ADD, false)) addRequested.value = true
+        when (mode) {
+            QuickAdd.OPEN -> Unit
+            QuickAdd.KEYPAD -> addRequested.value = true
+            QuickAdd.VOICE -> try {
+                listen.launch(
+                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "it-IT")
+                        .putExtra(RecognizerIntent.EXTRA_PROMPT, "Es. \"15 euro pranzo\""),
+                )
+            } catch (_: ActivityNotFoundException) {
+                addRequested.value = true
+            }
+        }
     }
 }
 

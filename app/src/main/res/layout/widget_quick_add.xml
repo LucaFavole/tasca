@@ -1,0 +1,27 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/add"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/widget_button_add"
+        android:contentDescription="Add expense"
+        android:padding="12dp"
+        android:src="@drawable/ic_add" />
+
+    <ImageView
+        android:id="@+id/voice"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/widget_button_voice"
+        android:contentDescription="Add by voice"
+        android:padding="12dp"
+        android:src="@drawable/ic_mic" />
+</LinearLayout>

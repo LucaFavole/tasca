@@ -32,7 +32,7 @@ class ExcelTest {
     }
 
     @Test fun readsThePreviousAppExport() {
-        val dir = File("../../Resources/Export")
+        val dir = File("../Resources/Export")
         val file = dir.listFiles { f -> f.name.endsWith(".xlsx") }?.firstOrNull()
         assumeTrue("export sample not present", file != null)
         val parsed = LedgerSheets.read(file!!.inputStream().use(Xlsx::read))

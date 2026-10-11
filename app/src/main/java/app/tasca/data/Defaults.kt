@@ -48,6 +48,10 @@ object Defaults {
         return if (s != null) s.icon to Palette.at(s.color) else "category" to Palette.at(fallbackIndex)
     }
 
+    /** The icon of the first style one of [words] starts with a keyword of, e.g. "spesa" gives the cart. */
+    fun iconFor(words: List<String>): String? =
+        styles.firstOrNull { st -> st.keywords.any { k -> words.any { it.startsWith(k) } } }?.icon
+
     private val expenseNames = listOf(
         "Casa", "Alimentari", "Caffè", "Svago", "Trasporti", "Salute", "Istruzione", "Regali",
         "Famiglia", "Attività fisica", "Roba da vestire", "Bollette", "Abbonamenti", "Viaggi", "Altro",

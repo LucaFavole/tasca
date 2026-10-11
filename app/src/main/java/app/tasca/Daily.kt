@@ -3,9 +3,7 @@ package app.tasca
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -47,7 +45,6 @@ object Daily {
 }
 
 object Reminder {
-    const val EXTRA_ADD = "add"
     const val ID = 1
     private const val CHANNEL = "reminder"
     private const val KEY = "reminder"
@@ -64,17 +61,12 @@ object Reminder {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Daily reminder", NotificationManager.IMPORTANCE_DEFAULT),
         )
-        fun open(code: Int, add: Boolean) = PendingIntent.getActivity(
-            context, code,
-            Intent(context, MainActivity::class.java).putExtra(EXTRA_ADD, add).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
         val n = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Have you recorded all of today's expenses?")
             .setContentText("Tap to check your day")
-            .setContentIntent(open(0, false))
-            .addAction(0, "Add expense", open(1, true))
+            .setContentIntent(QuickAdd.OPEN.pending(context))
+            .addAction(0, "Add expense", QuickAdd.KEYPAD.pending(context))
             .setAutoCancel(true)
             .build()
         @Suppress("MissingPermission")

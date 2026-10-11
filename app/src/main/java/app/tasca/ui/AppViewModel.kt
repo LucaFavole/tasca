@@ -16,6 +16,8 @@ import app.tasca.data.TxnKind
 import app.tasca.domain.InsightsCalc
 import app.tasca.domain.StatsRange
 import app.tasca.domain.Money
+import app.tasca.domain.Spoken
+import app.tasca.domain.SpokenParser
 import app.tasca.domain.TradeSide
 import app.tasca.domain.Period
 import app.tasca.domain.PeriodKind
@@ -196,6 +198,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun io(block: suspend () -> Unit) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { block() } }.onFailure { say(it.message ?: "Something went wrong") }
+    }
+
+    /** A sentence heard by the voice button, read by the keypad when it opens. */
+    var spoken: Spoken? = null
+
+    suspend fun prepareSpoken(text: String) {
+        spoken = withContext(Dispatchers.IO) { SpokenParser.parse(text, dao.categories(), LocalDate.now()) }
     }
 
     suspend fun txn(id: Long): Txn? = withContext(Dispatchers.IO) { dao.txn(id) }
