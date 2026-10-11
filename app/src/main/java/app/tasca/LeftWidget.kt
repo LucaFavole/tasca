@@ -17,7 +17,7 @@ class LeftWidget : AppWidgetProvider() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                manager.updateAppWidget(ids, views(context))
+                runCatching { manager.updateAppWidget(ids, views(context)) }
             } finally {
                 pending.finish()
             }

@@ -89,7 +89,7 @@ class TascaApp : Application() {
         WorkManager.getInstance(this).cancelUniqueWork("recurring")
         Daily.schedule(this)
         scope.launch {
-            Ledger.get(this@TascaApp).dao.ledgerChanges().debounce(500).collect { LeftWidget.refresh(this@TascaApp) }
+            Ledger.get(this@TascaApp).dao.ledgerChanges().debounce(500).collect { runCatching { LeftWidget.refresh(this@TascaApp) } }
         }
     }
 }
