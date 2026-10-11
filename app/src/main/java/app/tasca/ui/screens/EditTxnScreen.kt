@@ -53,6 +53,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -144,13 +145,31 @@ class TxnDraft(kind: TxnKind) {
         categoryId = if (kind == TxnKind.TRANSFER) null else categoryId,
         note = note.trim(), recurringId = recurringId,
     )
+
+    companion object {
+        val Saver = listSaver<TxnDraft, Any?>(
+            save = { listOf(it.kind.name, it.expr, it.accountId, it.toAccountId, it.categoryId, it.date.toEpochDay(), it.note) },
+            restore = {
+                TxnDraft(TxnKind.valueOf(it[0] as String)).apply {
+                    expr = it[1] as String
+                    accountId = it[2] as Long?
+                    toAccountId = it[3] as Long?
+                    categoryId = it[4] as Long?
+                    date = LocalDate.ofEpochDay(it[5] as Long)
+                    note = it[6] as String
+                }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind.EXPENSE, onDone: () -> Unit) {
-    val draft = remember { TxnDraft(initialKind) }
-    var recurringId by remember { mutableStateOf<Long?>(null) }
+    val draft = rememberSaveable(saver = TxnDraft.Saver) { TxnDraft(initialKind) }
+    var recurringId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Set once the draft is filled, so a draft restored after rotation or process death isn't overwritten.
+    var filled by rememberSaveable { mutableStateOf(false) }
     var repeat by rememberSaveable { mutableStateOf<Frequency?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -162,11 +181,13 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
     }
 
     LaunchedEffect(txnId) {
+        if (filled) return@LaunchedEffect
         if (txnId != null) vm.txn(txnId)?.let { draft.load(it); recurringId = it.recurringId }
         else {
             draft.accountId = selected
             vm.spoken?.let { draft.load(it); vm.spoken = null }
         }
+        filled = true
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
