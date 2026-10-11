@@ -16,9 +16,9 @@ object Defaults {
     private val styles = listOf(
         Style(listOf("casa", "home", "affitto", "rent", "housing", "deposit"), "home", 7),
         Style(listOf("svago", "fun", "leisure", "divertimento"), "celebration", 5),
-        Style(listOf("aliment", "grocer", "spesa", "food"), "cart", 2),
+        Style(listOf("aliment", "grocer", "spesa", "food", "esselunga", "conad", "coop", "lidl", "carrefour", "eurospin", "penny", "aldi", "despar", "famila", "iper", "supermerc", "pam"), "cart", 2),
         Style(listOf("caff", "coffee", "bar"), "coffee", 3),
-        Style(listOf("ristor", "restaurant", "mensa", "pranzo", "cena"), "restaurant", 10),
+        Style(listOf("ristor", "restaurant", "mensa", "pranzo", "cena", "pizzer", "trattor", "osteria"), "restaurant", 10),
         Style(listOf("wolt", "deliver", "glovo", "deliveroo"), "delivery", 13),
         Style(listOf("trasport", "transport", "bus", "treno", "auto", "car"), "bus", 15),
         Style(listOf("salute", "health", "medic", "farmac"), "health", 1),

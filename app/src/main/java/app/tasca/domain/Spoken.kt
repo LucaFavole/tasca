@@ -9,6 +9,11 @@ import java.time.LocalDate
 /** What a short spoken sentence such as "15 euro pranzo" or "ricevuto 200 stipendio" says about a new transaction. */
 data class Spoken(val amountCents: Long?, val kind: TxnKind, val categoryId: Long?, val note: String, val date: LocalDate)
 
+/** A category whose name, or one of the keywords that style it, starts one of [words]; "Altro" is never guessed. */
+fun guessCategory(words: List<String>, candidates: List<Category>): Category? =
+    candidates.firstOrNull { c -> c.name.lowercase() != "altro" && words.any { it.startsWith(c.name.lowercase().take(5)) } }
+        ?: Defaults.iconFor(words)?.let { icon -> candidates.firstOrNull { it.icon == icon } }
+
 object SpokenParser {
     private val INCOME = listOf("entrat", "ricevut", "incass", "guadagn", "stipend", "income", "received", "salary")
     private val FILLER = setOf(
@@ -30,8 +35,7 @@ object SpokenParser {
         val withoutAmount = (cents?.let { t.removeRange(it.range) } ?: NUMBER.replaceFirst(t, " "))
 
         val ofKind = categories.filter { it.kind == catKind }
-        val category = ofKind.firstOrNull { c -> c.name.lowercase() != "altro" && words.any { it.startsWith(c.name.lowercase().take(5)) } }
-            ?: Defaults.iconFor(words)?.let { icon -> ofKind.firstOrNull { it.icon == icon } }
+        val category = guessCategory(words, ofKind)
 
         val date = when {
             "altroieri" in words || "l'altro ieri" in t -> today.minusDays(2)

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +25,8 @@ import androidx.compose.material.icons.automirrored.outlined.Backspace
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -71,7 +74,10 @@ import app.tasca.data.TxnKind
 import app.tasca.domain.Calc
 import app.tasca.domain.Frequency
 import app.tasca.domain.Money
+import app.tasca.domain.ReceiptScan
 import app.tasca.domain.Spoken
+import app.tasca.domain.guessCategory
+import app.tasca.ui.rememberReceiptScanner
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.kindColor
@@ -119,6 +125,18 @@ class TxnDraft(kind: TxnKind) {
         categoryId = s.categoryId; date = s.date; note = s.note
     }
 
+    /** Fills what the receipt showed and keeps the rest; returns false when no total was found. */
+    fun load(r: ReceiptScan, categories: List<Category>): Boolean {
+        kind = TxnKind.EXPENSE
+        r.amountCents?.let { expr = Money.plain(it).replace('.', ',') }
+        r.date?.let { date = it }
+        r.store?.let { store ->
+            note = store
+            guessCategory(store.lowercase().split(' '), categories.filter { it.kind == CategoryKind.EXPENSE })?.let { categoryId = it.id }
+        }
+        return r.amountCents != null
+    }
+
     fun toTxn(id: Long, recurringId: Long?) = Txn(
         id = id, kind = kind, amountCents = amount!!, date = date, accountId = accountId!!,
         toAccountId = if (kind == TxnKind.TRANSFER) toAccountId else null,
@@ -136,6 +154,11 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
     var confirmDelete by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val selected by vm.selectedAccount.collectAsStateWithLifecycle()
+    var reading by remember { mutableStateOf(false) }
+    val scanReceipt = rememberReceiptScanner(onStart = { reading = true }) { r ->
+        reading = false
+        if (r != null) error = if (draft.load(r, vm.categories.value)) null else "Couldn't find the total: type it in"
+    }
 
     LaunchedEffect(txnId) {
         if (txnId != null) vm.txn(txnId)?.let { draft.load(it); recurringId = it.recurringId }
@@ -151,6 +174,8 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
             navigationIcon = { IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } },
             actions = {
                 if (txnId != null) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, "Delete") }
+                else if (reading) CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
+                else IconButton(onClick = scanReceipt) { Icon(Icons.Outlined.DocumentScanner, "Scan a receipt") }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
