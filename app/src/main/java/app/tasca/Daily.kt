@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -14,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.tasca.data.Ledger
+import kotlinx.coroutines.CancellationException
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -23,12 +25,19 @@ import java.time.ZonedDateTime
  * Each run books the next one for the following 23:00, so the time never drifts.
  */
 class DailyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = try {
         Ledger.get(applicationContext).postDueRecurring()
         LeftWidget.refresh(applicationContext)
         if (Reminder.isOn(applicationContext)) Reminder.show(applicationContext)
-        Daily.schedule(applicationContext, ExistingWorkPolicy.APPEND_OR_REPLACE)
-        return Result.success()
+        Result.success()
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        // A failure would also fail the next run, which is chained after this one. Posting is idempotent, so tomorrow catches up.
+        Log.w("DailyWorker", "Daily run failed", e)
+        Result.success()
+    } finally {
+        // A stopped run is retried by WorkManager, and that retry books the next one.
+        if (!isStopped) Daily.schedule(applicationContext, ExistingWorkPolicy.APPEND_OR_REPLACE)
     }
 }
 
