@@ -155,7 +155,9 @@ private fun AppRoot(vm: AppViewModel, addRequested: MutableState<Boolean>) {
         if (addRequested.value) { addRequested.value = false; nav.navigate("txn") }
     }
     val context = LocalContext.current
-    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) Reminder.setOn(context, false)
+    }
     LaunchedEffect(Unit) {
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && Reminder.isOn(context) && !Reminder.allowed(context) && !prefs.getBoolean("askedNotifications", false)) {

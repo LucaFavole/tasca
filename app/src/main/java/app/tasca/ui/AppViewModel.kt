@@ -224,7 +224,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             say("A category called ${c.name} already exists")
         } else dao.upsertCategory(c)
     }
-    suspend fun categoryUsage(id: Long): Int = withContext(Dispatchers.IO) { dao.categoryUsage(id) }
+    suspend fun categoryUsage(id: Long): CategoryUsage =
+        withContext(Dispatchers.IO) { CategoryUsage(dao.categoryUsage(id), dao.categoryRecurring(id)) }
     fun deleteCategory(id: Long, replacement: Long?) = io { ledger.deleteCategory(id, replacement) }
 
     fun saveRecurring(r: Recurring) = io {
@@ -263,3 +264,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportFileName(): String = "tasca_${LocalDate.now()}.xlsx"
 }
+
+/** What deleting a category touches: [txns] must move elsewhere, [recurring] payments are deleted with it. */
+data class CategoryUsage(val txns: Int, val recurring: Int)

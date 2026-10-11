@@ -136,7 +136,7 @@ fun PlanScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditRecurring:
                     title = "Monthly budgets",
                     action = { TextButton(onClick = { pickBudget = true }) { Icon(Icons.Outlined.Add, null); Text("Add") } },
                 ) {
-                    if (budgets.isEmpty()) EmptyHint("Set a monthly limit on a category and Home shows how close you are.")
+                    if (budgets.isEmpty()) EmptyHint("Set a monthly limit on a category to see here how much of it you've spent.")
                     budgets.forEach { b ->
                         val c = categories.firstOrNull { it.id == b.categoryId } ?: return@forEach
                         val spent = spend.firstOrNull { it.categoryId == c.id }?.totalCents ?: 0

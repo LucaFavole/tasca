@@ -73,6 +73,7 @@ import app.tasca.domain.Money
 import app.tasca.io.LedgerSheets
 import app.tasca.ui.AppIcons
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.CategoryUsage
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.SectionCard
 import app.tasca.ui.theme.ThemeMode
@@ -246,7 +247,7 @@ fun CategoriesScreen(vm: AppViewModel, onBack: () -> Unit) {
     val categories by vm.categories.collectAsStateWithLifecycle()
     var kind by remember { mutableStateOf(CategoryKind.EXPENSE) }
     var editing by remember { mutableStateOf<Category?>(null) }
-    var deleting by remember { mutableStateOf<Pair<Category, Int>?>(null) }
+    var deleting by remember { mutableStateOf<Pair<Category, CategoryUsage>?>(null) }
     val scope = rememberCoroutineScope()
 
     SubScreen("Categories", onBack, actions = {
@@ -294,17 +295,26 @@ fun CategoriesScreen(vm: AppViewModel, onBack: () -> Unit) {
             onDismissRequest = { deleting = null },
             title = { Text("Delete ${c.name}?") },
             text = {
-                if (used == 0) Text("No transactions use it.")
-                else Column {
-                    Text("$used transactions use it. Move them to:")
-                    Spacer(Modifier.height(8.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        others.forEach { o -> FilterChip(target == o.id, { target = o.id }, label = { Text(o.name) }) }
+                Column {
+                    if (used.txns == 0) Text("No transactions use it.")
+                    else {
+                        Text("${used.txns} transactions use it. Move them to:")
+                        Spacer(Modifier.height(8.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            others.forEach { o -> FilterChip(target == o.id, { target = o.id }, label = { Text(o.name) }) }
+                        }
+                    }
+                    if (used.recurring > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (used.recurring == 1) "Its regular payment will be deleted too."
+                            else "Its ${used.recurring} regular payments will be deleted too.",
+                        )
                     }
                 }
             },
             confirmButton = {
-                TextButton(enabled = used == 0 || target != null, onClick = { vm.deleteCategory(c.id, target); deleting = null }) {
+                TextButton(enabled = used.txns == 0 || target != null, onClick = { vm.deleteCategory(c.id, target); deleting = null }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },

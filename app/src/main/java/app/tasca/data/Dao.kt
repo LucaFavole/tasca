@@ -50,6 +50,7 @@ interface LedgerDao {
     @Upsert suspend fun upsertCategory(c: Category): Long
     @Query("DELETE FROM category WHERE id = :id") suspend fun deleteCategory(id: Long)
     @Query("SELECT COUNT(*) FROM txn WHERE categoryId = :id") suspend fun categoryUsage(id: Long): Int
+    @Query("SELECT COUNT(*) FROM recurring WHERE categoryId = :id") suspend fun categoryRecurring(id: Long): Int
     @Query("UPDATE txn SET categoryId = :to WHERE categoryId = :from") suspend fun moveCategory(from: Long, to: Long)
 
     @Upsert suspend fun upsertTxn(t: Txn): Long
