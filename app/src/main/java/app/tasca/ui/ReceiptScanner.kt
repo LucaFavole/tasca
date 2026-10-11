@@ -44,16 +44,23 @@ fun rememberReceiptScanner(onStart: () -> Unit, onResult: (ReceiptScan?) -> Unit
             .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_BASE)
             .build()
         GmsDocumentScanning.getClient(options).getStartScanIntent(context.activity())
-            .addOnSuccessListener { onStart(); launcher.launch(IntentSenderRequest.Builder(it).build()) }
+            .addOnSuccessListener {
+                // The screen may have closed while the intent was prepared, leaving the launcher unregistered.
+                runCatching { launcher.launch(IntentSenderRequest.Builder(it).build()) }
+                    .onSuccess { onStart() }
+                    .onFailure { result(null) }
+            }
             .addOnFailureListener { result(null) }
     }
 }
 
 private fun read(context: Context, uri: Uri, onResult: (ReceiptScan?) -> Unit) {
     val image = runCatching { InputImage.fromFilePath(context, uri) }.getOrElse { onResult(null); return }
-    TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
+    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    recognizer.process(image)
         .addOnSuccessListener { text -> onResult(ReceiptParser.parse(rows(text), LocalDate.now())) }
         .addOnFailureListener { onResult(null) }
+        .addOnCompleteListener { recognizer.close() }
 }
 
 /** Rebuilds printed rows: a label and its amount are often recognised as separate blocks side by side. */
