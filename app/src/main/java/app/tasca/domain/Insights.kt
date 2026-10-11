@@ -42,10 +42,6 @@ data class Insights(
 }
 
 /**
- * Averages use only complete months before the current one, so a half-finished month never drags them down;
- * the current month is compared against them separately.
- */
-/**
  * The months Stats looks at. A preset ends at the current month; a custom range can end anywhere.
  * Averages always use only the complete months in the range.
  */
@@ -61,6 +57,10 @@ data class StatsRange(val from: YearMonth, val to: YearMonth, val preset: Int? =
 
 fun oneDecimal(v: Double): String = String.format(java.util.Locale.ITALY, "%.1f", v)
 
+/**
+ * Averages use only complete months before the current one, so a half-finished month never drags them down;
+ * the current month is compared against them separately. Empty months before the first transaction don't count.
+ */
 object InsightsCalc {
     fun compute(
         today: LocalDate,
@@ -71,7 +71,7 @@ object InsightsCalc {
         liquidCents: Long?,
     ): Insights {
         val current = YearMonth.from(today)
-        val complete = averaged.toSet()
+        val complete = averaged.dropWhile { (incomeByMonth[it] ?: 0L) == 0L && (expenseByMonth[it] ?: 0L) == 0L }.toSet()
         val months = complete.size.coerceAtLeast(1)
         val avgIncome = complete.sumOf { incomeByMonth[it] ?: 0 } / months
         val avgExpense = complete.sumOf { expenseByMonth[it] ?: 0 } / months

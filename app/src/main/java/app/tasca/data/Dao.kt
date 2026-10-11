@@ -13,7 +13,7 @@ private const val ACCOUNT_FILTER = "(:accountId IS NULL OR t.accountId = :accoun
 interface LedgerDao {
     @Query(
         """
-        SELECT a.id, a.name, a.color, a.icon, a.initialCents, a.deleted,
+        SELECT a.id, a.name, a.color, a.icon, a.initialCents, a.deleted, a.code,
           a.initialCents + COALESCE((
             SELECT SUM(CASE
               WHEN t.kind = 'INCOME' THEN t.amountCents

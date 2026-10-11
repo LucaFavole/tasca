@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,7 +76,8 @@ fun StocksScreen(vm: AppViewModel, onBack: () -> Unit, onEdit: (Long?) -> Unit) 
     val quotes by vm.quotes.collectAsStateWithLifecycle()
     val balances by vm.balances.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { vm.refreshQuotes() }
+    var fetched by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (!fetched) { fetched = true; vm.refreshQuotes() } }
 
     val bySymbol = quotes.associateBy { it.symbol }
     val all = Portfolio.of(holdings, bySymbol)

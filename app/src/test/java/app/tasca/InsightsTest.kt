@@ -73,6 +73,16 @@ class InsightsTest {
         assertEquals(300_000, i.incomeCents)
     }
 
+    @Test fun emptyMonthsBeforeTheFirstTransactionDontLowerAverages() {
+        val i = InsightsCalc.compute(
+            today, listOf("2026-06", "2026-07", "2026-08", "2026-09"),
+            mapOf("2026-08" to 200_000L, "2026-09" to 200_000L), mapOf("2026-08" to 100_000L), emptyList(), null,
+        )
+        assertEquals(2, i.months)
+        assertEquals(200_000, i.incomeCents)
+        assertEquals(50_000, i.expenseCents)
+    }
+
     @Test fun rangeWithNoFinishedMonthHasNoAverages() {
         val i = InsightsCalc.compute(today, emptyList(), mapOf("2026-10" to 100_000L), mapOf("2026-10" to 50_000L), emptyList(), null)
         assertEquals(0, i.months)

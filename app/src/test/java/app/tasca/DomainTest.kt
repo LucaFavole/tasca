@@ -47,6 +47,17 @@ class DomainTest {
         assertEquals(10, alreadyPosted(old, old))
     }
 
+    @Test fun resumingSkipsWhatWasMissedWhilePaused() {
+        val paused = Recurring(
+            name = "Gym", kind = TxnKind.EXPENSE, amountCents = 3000, accountId = 1, categoryId = 1,
+            frequency = Frequency.MONTHLY, startDate = LocalDate.of(2026, 1, 10), posted = 3, active = false,
+        )
+        val resumed = paused.copy(active = true)
+        assertEquals(LocalDate.of(2026, 10, 10), resumed.copy(posted = alreadyPosted(paused, resumed, LocalDate.of(2026, 10, 10))).nextDate)
+        assertEquals(LocalDate.of(2026, 11, 10), resumed.copy(posted = alreadyPosted(paused, resumed, LocalDate.of(2026, 10, 11))).nextDate)
+        assertEquals(3, alreadyPosted(paused, paused.copy(amountCents = 3500), LocalDate.of(2026, 10, 11)))
+    }
+
     @Test fun amountsParseInEitherLocale() {
         assertEquals(123456L, LedgerSheets.parseAmount("1.234,56"))
         assertEquals(123456L, LedgerSheets.parseAmount("1,234.56"))

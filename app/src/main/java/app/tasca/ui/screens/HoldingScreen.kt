@@ -43,6 +43,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
 import app.tasca.data.Holding
 import app.tasca.domain.Money
 import app.tasca.domain.Trade
@@ -133,7 +134,7 @@ fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
             }
             Button(
-                onClick = {
+                onClick = dropUnlessResumed {
                     val qty = number(quantity)
                     val avg = number(avgPrice)
                     error = when {
@@ -153,11 +154,12 @@ fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
     }
 
     trading?.let { side ->
+        val once = dropUnlessResumed { trading = null; onDone() }
         TradeDialog(side, existing!!, livePrice?.first, vm.taxRatePct, onDismiss = { trading = null }) { shares, unit, fee, rate, tax ->
+            if (trading == null) return@TradeDialog
             if (side == TradeSide.SELL) vm.taxRatePct = rate
             vm.trade(existing.id, side, shares, unit, fee, tax)
-            trading = null
-            onDone()
+            once()
         }
     }
     if (confirmDelete && existing != null) {
@@ -166,7 +168,7 @@ fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
             title = { Text("Delete ${existing.name}?") },
             text = { Text("Only removes it from Investments. Your accounts and transactions don't change.") },
             confirmButton = {
-                TextButton(onClick = { vm.deleteHolding(existing.id); confirmDelete = false; onDone() }) {
+                TextButton(onClick = dropUnlessResumed { vm.deleteHolding(existing.id); confirmDelete = false; onDone() }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -308,7 +310,7 @@ private fun TradeDialog(
 /** Accepts "41,678225", "1.234,5" and "265.52". */
 private fun number(s: String): Double? = s.trim().replace(" ", "").let {
     if (it.contains(',')) it.replace(".", "").replace(',', '.') else it
-}.toDoubleOrNull()
+}.toDoubleOrNull()?.takeIf { it.isFinite() }
 
 private fun decimal(v: Double, maxDecimals: Int = 6): String =
     BigDecimal(v).setScale(maxDecimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')

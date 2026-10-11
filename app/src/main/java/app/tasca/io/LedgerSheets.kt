@@ -15,12 +15,16 @@ data class SheetRow(
     val category: String? = null,
     val amountCents: Long,
     val note: String = "",
+    val accountCode: String? = null,
+    val toAccountCode: String? = null,
 )
 
 /** An account's opening balance, which no transaction carries. */
-data class AccountSheetRow(val name: String, val openingCents: Long, val deleted: Boolean)
+data class AccountSheetRow(val name: String, val openingCents: Long, val deleted: Boolean, val code: String? = null)
 
-data class HoldingSheetRow(val account: String, val symbol: String, val name: String, val quantity: Double, val investedCents: Long)
+data class HoldingSheetRow(
+    val account: String, val symbol: String, val name: String, val quantity: Double, val investedCents: Long, val accountCode: String? = null,
+)
 
 data class ParsedWorkbook(
     val rows: List<SheetRow>,
@@ -38,11 +42,11 @@ object LedgerSheets {
     private val TXN_HEADER = listOf(
         "Date and time", "Category", "Account", "Amount in default currency", "Default currency",
         "Amount in account currency", "Account currency", "Transaction amount in transaction currency",
-        "Transaction currency", "Tags", "Comment",
+        "Transaction currency", "Tags", "Comment", "Account code",
     )
     private val TRANSFER_HEADER = listOf(
         "Date and time", "Outgoing", "Incoming", "Amount in outgoing currency", "Outgoing currency",
-        "Amount in incoming currency", "Incoming currency", "Comment",
+        "Amount in incoming currency", "Incoming currency", "Comment", "Outgoing code", "Incoming code",
     )
 
     private enum class Field(vararg val names: String) {
@@ -57,10 +61,13 @@ object LedgerSheets {
             "amount", "importo", "valore",
         ),
         NOTE("comment", "note", "notes", "commento", "nota", "description", "descrizione"),
+        ACCOUNT_CODE("account code"),
+        FROM_CODE("outgoing code"),
+        TO_CODE("incoming code"),
     }
 
-    private val ACCOUNTS_HEADER = listOf("Account", "Opening balance", "Deleted")
-    private val HOLDINGS_HEADER = listOf("Account", "Symbol", "Name", "Shares", "Total paid")
+    private val ACCOUNTS_HEADER = listOf("Account", "Opening balance", "Deleted", "Code")
+    private val HOLDINGS_HEADER = listOf("Account", "Symbol", "Name", "Shares", "Total paid", "Account code")
 
     fun write(
         rows: List<SheetRow>,
@@ -76,7 +83,7 @@ object LedgerSheets {
                     listOf(
                         Cell.Date(it.date), Cell.Text(it.category.orEmpty()), Cell.Text(it.account),
                         amount, Cell.Text(currency), amount, Cell.Text(currency),
-                        Cell.Empty, Cell.Empty, Cell.Empty, Cell.Text(it.note),
+                        Cell.Empty, Cell.Empty, Cell.Empty, Cell.Text(it.note), Cell.Text(it.accountCode.orEmpty()),
                     )
                 },
         )
@@ -87,6 +94,7 @@ object LedgerSheets {
                     listOf(
                         Cell.Date(it.date), Cell.Text(it.account), Cell.Text(it.toAccount.orEmpty()),
                         Cell.Num(Money.toDouble(it.amountCents)), Cell.Text(currency), Cell.Empty, Cell.Empty, Cell.Text(it.note),
+                        Cell.Text(it.accountCode.orEmpty()), Cell.Text(it.toAccountCode.orEmpty()),
                     )
                 },
         )
@@ -95,10 +103,16 @@ object LedgerSheets {
             txnSheet("Income", "income list", TxnKind.INCOME),
             transfers,
             Sheet("Accounts", listOf(listOf(Cell.Text("accounts")), ACCOUNTS_HEADER.map { Cell.Text(it) }) + accounts.map {
-                listOf(Cell.Text(it.name), Cell.Num(Money.toDouble(it.openingCents)), Cell.Text(if (it.deleted) "yes" else ""))
+                listOf(
+                    Cell.Text(it.name), Cell.Num(Money.toDouble(it.openingCents)), Cell.Text(if (it.deleted) "yes" else ""),
+                    Cell.Text(it.code.orEmpty()),
+                )
             }),
             Sheet("Investments", listOf(listOf(Cell.Text("investments")), HOLDINGS_HEADER.map { Cell.Text(it) }) + holdings.map {
-                listOf(Cell.Text(it.account), Cell.Text(it.symbol), Cell.Text(it.name), Cell.Num(it.quantity), Cell.Num(Money.toDouble(it.investedCents)))
+                listOf(
+                    Cell.Text(it.account), Cell.Text(it.symbol), Cell.Text(it.name), Cell.Num(it.quantity),
+                    Cell.Num(Money.toDouble(it.investedCents)), Cell.Text(it.accountCode.orEmpty()),
+                )
             }),
         )
     }
@@ -141,13 +155,18 @@ object LedgerSheets {
                 val row = if (kind == TxnKind.TRANSFER) {
                     val from = text(Field.FROM).ifEmpty { text(Field.ACCOUNT) }
                     val to = text(Field.TO)
-                    if (from.isEmpty() || to.isEmpty() || from.equals(to, ignoreCase = true)) {
+                    val fromCode = text(Field.FROM_CODE).ifEmpty { text(Field.ACCOUNT_CODE) }
+                    val toCode = text(Field.TO_CODE)
+                    if (from.isEmpty() || to.isEmpty() || (from.equals(to, ignoreCase = true) && fromCode == toCode)) {
                         return@forEachIndexed problems.plusAssign("$where: transfer needs two different accounts")
                     }
-                    SheetRow(kind, date, from, to, null, abs(signed), note)
+                    SheetRow(kind, date, from, to, null, abs(signed), note, fromCode.ifEmpty { null }, toCode.ifEmpty { null })
                 } else {
                     val account = text(Field.ACCOUNT).ifEmpty { "Main" }
-                    SheetRow(kind, date, account, null, text(Field.CATEGORY).ifEmpty { "Altro" }, abs(signed), note)
+                    SheetRow(
+                        kind, date, account, null, text(Field.CATEGORY).ifEmpty { "Altro" }, abs(signed), note,
+                        text(Field.ACCOUNT_CODE).ifEmpty { null },
+                    )
                 }
                 rows += row
             }
@@ -156,7 +175,8 @@ object LedgerSheets {
         val accounts = body(sheets, "Accounts", "Account").mapNotNull { r ->
             val name = r.getOrNull(0)?.text().orEmpty()
             val opening = r.getOrNull(1)?.num()
-            if (name.isEmpty() || opening == null) null else AccountSheetRow(name, Money.fromDouble(opening), r.getOrNull(2)?.text() == "yes")
+            if (name.isEmpty() || opening == null) null
+            else AccountSheetRow(name, Money.fromDouble(opening), r.getOrNull(2)?.text() == "yes", r.getOrNull(3)?.text()?.ifEmpty { null })
         }
         val holdings = body(sheets, "Investments", "Account").mapNotNull { r ->
             val qty = r.getOrNull(3)?.num()
@@ -164,7 +184,10 @@ object LedgerSheets {
             val account = r.getOrNull(0)?.text().orEmpty()
             val symbol = r.getOrNull(1)?.text().orEmpty()
             if (account.isEmpty() || symbol.isEmpty() || qty == null || paid == null) null
-            else HoldingSheetRow(account, symbol, r.getOrNull(2)?.text().orEmpty().ifEmpty { symbol }, qty, Money.fromDouble(paid))
+            else HoldingSheetRow(
+                account, symbol, r.getOrNull(2)?.text().orEmpty().ifEmpty { symbol }, qty, Money.fromDouble(paid),
+                r.getOrNull(5)?.text()?.ifEmpty { null },
+            )
         }
         return ParsedWorkbook(rows, problems, accounts, holdings)
     }

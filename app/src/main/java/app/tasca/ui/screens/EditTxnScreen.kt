@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
 import app.tasca.data.Category
 import app.tasca.data.CategoryKind
 import app.tasca.data.Defaults
@@ -174,32 +175,33 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
             draft,
             saveLabel = if (repeat != null) "Save regular payment" else "Save",
             error = error,
-        ) {
-            error = draft.problem()
-            if (error != null) return@Keypad
-            val freq = repeat
-            if (freq != null) {
-                vm.saveRecurring(
-                    Recurring(
-                        name = draft.note.trim().ifEmpty { vm.categories.value.firstOrNull { it.id == draft.categoryId }?.name ?: "Transfer" },
-                        kind = draft.kind, amountCents = draft.amount!!, accountId = draft.accountId!!,
-                        toAccountId = if (draft.kind == TxnKind.TRANSFER) draft.toAccountId else null,
-                        categoryId = if (draft.kind == TxnKind.TRANSFER) null else draft.categoryId,
-                        frequency = freq, startDate = draft.date,
+            onSave = dropUnlessResumed {
+                error = draft.problem()
+                if (error != null) return@dropUnlessResumed
+                val freq = repeat
+                if (freq != null) {
+                    vm.saveRecurring(
+                        Recurring(
+                            name = draft.note.trim().ifEmpty { vm.categories.value.firstOrNull { it.id == draft.categoryId }?.name ?: "Transfer" },
+                            kind = draft.kind, amountCents = draft.amount!!, accountId = draft.accountId!!,
+                            toAccountId = if (draft.kind == TxnKind.TRANSFER) draft.toAccountId else null,
+                            categoryId = if (draft.kind == TxnKind.TRANSFER) null else draft.categoryId,
+                            frequency = freq, startDate = draft.date,
+                        )
                     )
-                )
-            } else {
-                vm.saveTxn(draft.toTxn(txnId ?: 0, recurringId))
-            }
-            onDone()
-        }
+                } else {
+                    vm.saveTxn(draft.toTxn(txnId ?: 0, recurringId))
+                }
+                onDone()
+            },
+        )
     }
 
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete this transaction?") },
-            confirmButton = { TextButton(onClick = { vm.deleteTxn(txnId!!); confirmDelete = false; onDone() }) { Text("Delete") } },
+            confirmButton = { TextButton(onClick = dropUnlessResumed { vm.deleteTxn(txnId!!); confirmDelete = false; onDone() }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }

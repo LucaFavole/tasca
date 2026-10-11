@@ -54,4 +54,20 @@ class ExcelTest {
         assertEquals(holdings, parsed.holdings)
         assertEquals(rows.size, parsed.rows.size)
     }
+
+    @Test fun accountCodesKeepSameNamedAccountsApart() {
+        val coded = listOf(
+            SheetRow(TxnKind.EXPENSE, LocalDate.of(2026, 10, 9), "Main", null, "Spesa", 1000, "", "A1"),
+            SheetRow(TxnKind.EXPENSE, LocalDate.of(2026, 10, 9), "Main", null, "Spesa", 2000, "", "A7"),
+            SheetRow(TxnKind.TRANSFER, LocalDate.of(2026, 10, 8), "Main", "Main", null, 500, "", "A7", "A1"),
+        )
+        val accounts = listOf(AccountSheetRow("Main", 0, false, "A1"), AccountSheetRow("Main", 100, true, "A7"))
+        val holdings = listOf(HoldingSheetRow("Main", "XEON.DE", "Xeon", 1.0, 15_000, "A7"))
+        val out = ByteArrayOutputStream()
+        Xlsx.write(LedgerSheets.write(coded, "EUR", accounts, holdings), out)
+        val parsed = LedgerSheets.read(Xlsx.read(ByteArrayInputStream(out.toByteArray())))
+        assertEquals(coded.toSet(), parsed.rows.toSet())
+        assertEquals(accounts, parsed.accounts)
+        assertEquals(holdings, parsed.holdings)
+    }
 }

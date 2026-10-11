@@ -22,6 +22,8 @@ data class Account(
     val initialCents: Long = 0,
     /** A deleted account is hidden everywhere, but its transactions stay in the history and in the Total. */
     val deleted: Boolean = false,
+    /** Short id like "A3" that never changes, written to backups so two accounts with the same name never mix. */
+    @ColumnInfo(defaultValue = "") val code: String = "",
 )
 
 @Entity(tableName = "category", indices = [Index(value = ["kind", "name"], unique = true)])
@@ -146,9 +148,10 @@ data class AccountBalance(
     val icon: String,
     val initialCents: Long,
     val deleted: Boolean,
+    val code: String,
     @ColumnInfo(name = "balance") val balanceCents: Long,
 ) {
-    fun toAccount() = Account(id, name, color, icon, initialCents, deleted)
+    fun toAccount() = Account(id, name, color, icon, initialCents, deleted, code)
 }
 
 data class CategoryTotal(

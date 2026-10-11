@@ -194,7 +194,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun saveTxn(t: Txn) = io { dao.upsertTxn(t) }
     fun deleteTxn(id: Long) = io { dao.deleteTxn(id); say("Deleted") }
 
-    fun saveAccount(a: Account) = io { dao.upsertAccount(a) }
+    fun saveAccount(a: Account) = io { ledger.saveAccount(a) }
     fun deleteAccount(id: Long) = io {
         ledger.deleteAccount(id)
         if (selectedAccount.value == id) selectedAccount.value = null
@@ -233,7 +233,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val parsed = LedgerSheets.read(sheets)
         val r = ledger.import(parsed)
         val extra = if (parsed.problems.isEmpty()) "" else ", ${parsed.problems.size} rows unreadable"
-        say("Imported ${r.added} (${r.skipped} already present$extra). New: ${r.newAccounts} accounts, ${r.newCategories} categories")
+        val kept = if (r.keptAccounts == 0) "" else ". ${r.keptAccounts} accounts already in use kept their current balance and investments"
+        say("Imported ${r.added} (${r.skipped} already present$extra). New: ${r.newAccounts} accounts, ${r.newCategories} categories$kept")
     }
 
     fun exportExcel(uri: Uri) = io {

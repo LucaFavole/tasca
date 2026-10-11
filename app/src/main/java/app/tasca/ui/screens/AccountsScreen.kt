@@ -175,7 +175,15 @@ private fun AccountDialog(
     var styling by remember { mutableStateOf(current == null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (current == null) "New account" else current.name) },
+        title = {
+            if (current == null) Text("New account")
+            else Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(current.name, Modifier.weight(1f, fill = false))
+                Text(
+                    "  ${current.code}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (onTransactions != null) FilledTonalButton(onClick = onTransactions, Modifier.fillMaxWidth()) { Text("See transactions") }

@@ -9,6 +9,7 @@ import androidx.room.migration.AutoMigrationSpec
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.withTransaction
 import app.tasca.domain.Trade
 import app.tasca.domain.TradeSide
@@ -22,11 +23,12 @@ import java.time.LocalDate
 
 @Database(
     entities = [Account::class, Category::class, Txn::class, Recurring::class, Budget::class, Holding::class, Quote::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AppDb.TotalIsEverything::class),
         AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4, spec = AppDb.AccountCodes::class),
     ],
 )
 @TypeConverters(Converters::class)
@@ -36,9 +38,14 @@ abstract class AppDb : RoomDatabase() {
     @DeleteColumn(tableName = "account", columnName = "includeInTotal")
     @RenameColumn(tableName = "account", fromColumnName = "archived", toColumnName = "deleted")
     class TotalIsEverything : AutoMigrationSpec
+
+    class AccountCodes : AutoMigrationSpec {
+        override fun onPostMigrate(db: SupportSQLiteDatabase) = db.execSQL("UPDATE account SET code = 'A' || id")
+    }
 }
 
-data class ImportResult(val added: Int, val skipped: Int, val newAccounts: Int, val newCategories: Int)
+/** [keptAccounts]: accounts already in use whose opening balance, state or investments in the file were ignored. */
+data class ImportResult(val added: Int, val skipped: Int, val newAccounts: Int, val newCategories: Int, val keptAccounts: Int)
 
 /** The single entry point for reading and changing the user's money data. */
 class Ledger(private val db: AppDb) {
@@ -46,7 +53,7 @@ class Ledger(private val db: AppDb) {
 
     suspend fun ensureSeeded() = db.withTransaction {
         if (dao.accounts().isEmpty() && dao.categories().isEmpty()) {
-            dao.upsertAccount(Defaults.account("Main", 0))
+            saveAccount(Defaults.account("Main", 0))
             Defaults.categories().forEach { dao.upsertCategory(it) }
         }
     }
@@ -65,6 +72,14 @@ class Ledger(private val db: AppDb) {
         }
         count
     }
+
+    /** Inserts or updates an account, giving a new one the next free code. */
+    suspend fun saveAccount(a: Account): Long = db.withTransaction {
+        dao.upsertAccount(if (a.code.isEmpty()) a.copy(code = nextCode(dao.accounts())) else a)
+    }
+
+    private fun nextCode(accounts: List<Account>) =
+        "A" + ((accounts.mapNotNull { it.code.removePrefix("A").toIntOrNull() }.maxOrNull() ?: 0) + 1)
 
     /** Removes an unused account; an account with history is hidden instead, so the Total and history stay intact. */
     suspend fun deleteAccount(id: Long) = db.withTransaction {
@@ -135,22 +150,29 @@ class Ledger(private val db: AppDb) {
     }
 
     /**
-     * Adds the rows of an imported workbook. Accounts and categories are matched by name and created when missing.
+     * Adds the rows of an imported workbook. Accounts are matched by code, or by name in files without codes
+     * (the old app's), preferring an account that isn't deleted; categories by name. Missing ones are created.
      * A row identical to one already stored is skipped, so importing the same file twice adds nothing,
      * while genuine same-day duplicates inside one file are all kept.
+     * Opening balances, deleted state and investments from the file apply only to accounts that were still empty,
+     * so restoring an old backup never overwrites what changed on the phone since.
      */
     suspend fun import(book: ParsedWorkbook): ImportResult = db.withTransaction {
         val rows = book.rows
-        val accounts = dao.accounts().associateBy { it.name.lowercase() }.toMutableMap()
+        val accounts = dao.accounts().toMutableList()
+        val empty = accounts.filter { dao.accountUsage(it.id) == 0 && dao.holdingCount(it.id) == 0 }.map { it.id }.toMutableSet()
         val categories = dao.categories().associateBy { it.kind to it.name.lowercase() }.toMutableMap()
         var newAccounts = 0
         var newCategories = 0
 
-        suspend fun account(name: String): Long = accounts.getOrPut(name.lowercase()) {
+        suspend fun account(name: String, code: String?): Long {
+            val found = if (code != null) accounts.firstOrNull { it.code == code }
+            else accounts.filter { it.name.equals(name, ignoreCase = true) }.minByOrNull { it.deleted }
+            if (found != null) return found.id
             newAccounts++
-            val a = Defaults.account(name, accounts.size)
-            a.copy(id = dao.upsertAccount(a))
-        }.id
+            val a = Defaults.account(name, accounts.size).copy(code = code ?: nextCode(accounts))
+            return a.copy(id = dao.upsertAccount(a)).also { accounts += it; empty += it.id }.id
+        }
 
         suspend fun category(name: String, kind: CategoryKind): Long = categories.getOrPut(kind to name.lowercase()) {
             newCategories++
@@ -166,8 +188,8 @@ class Ledger(private val db: AppDb) {
                 kind = row.kind,
                 amountCents = row.amountCents,
                 date = row.date,
-                accountId = account(row.account),
-                toAccountId = row.toAccount?.let { account(it) },
+                accountId = account(row.account, row.accountCode),
+                toAccountId = row.toAccount?.let { account(it, row.toAccountCode) },
                 categoryId = row.category?.let {
                     category(it, if (row.kind == TxnKind.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE)
                 },
@@ -182,19 +204,19 @@ class Ledger(private val db: AppDb) {
                 toInsert += txn
             }
         }
-        dao.insertTxns(toInsert)
+        val kept = mutableSetOf<Long>()
         for (a in book.accounts) {
-            val id = account(a.name)
-            val current = accounts.getValue(a.name.lowercase())
-            dao.upsertAccount(current.copy(id = id, initialCents = a.openingCents, deleted = a.deleted))
+            val current = accounts.first { it.id == account(a.name, a.code) }
+            if (current.id in empty) dao.upsertAccount(current.copy(name = a.name, initialCents = a.openingCents, deleted = a.deleted))
+            else if (current.initialCents != a.openingCents || current.deleted != a.deleted) kept += current.id
         }
-        val existingHoldings = dao.holdings().associateBy { it.accountId to it.symbol }
         for (h in book.holdings) {
-            val accountId = account(h.account)
-            val id = existingHoldings[accountId to h.symbol]?.id ?: 0
-            dao.upsertHolding(Holding(id, accountId, h.symbol, h.name, h.quantity, h.investedCents))
+            val accountId = account(h.account, h.accountCode)
+            if (accountId in empty) dao.upsertHolding(Holding(0, accountId, h.symbol, h.name, h.quantity, h.investedCents))
+            else kept += accountId
         }
-        ImportResult(toInsert.size, skipped, newAccounts, newCategories)
+        dao.insertTxns(toInsert)
+        ImportResult(toInsert.size, skipped, newAccounts, newCategories, kept.size)
     }
 
     suspend fun exportBook(currency: String): List<app.tasca.io.Sheet> {
@@ -202,8 +224,11 @@ class Ledger(private val db: AppDb) {
         val byId = accounts.associateBy { it.id }
         return LedgerSheets.write(
             exportRows(), currency,
-            accounts.map { AccountSheetRow(it.name, it.initialCents, it.deleted) },
-            dao.holdings().map { HoldingSheetRow(byId.getValue(it.accountId).name, it.symbol, it.name, it.quantity, it.investedCents) },
+            accounts.map { AccountSheetRow(it.name, it.initialCents, it.deleted, it.code) },
+            dao.holdings().map {
+                val a = byId.getValue(it.accountId)
+                HoldingSheetRow(a.name, it.symbol, it.name, it.quantity, it.investedCents, a.code)
+            },
         )
     }
 
@@ -211,14 +236,17 @@ class Ledger(private val db: AppDb) {
         val accounts = dao.accounts().associateBy { it.id }
         val categories = dao.categories().associateBy { it.id }
         return dao.allTxns().sortedWith(compareByDescending<Txn> { it.date }.thenByDescending { it.id }).map {
+            val to = it.toAccountId?.let(accounts::getValue)
             SheetRow(
                 kind = it.kind,
                 date = it.date,
                 account = accounts.getValue(it.accountId).name,
-                toAccount = it.toAccountId?.let { id -> accounts.getValue(id).name },
+                toAccount = to?.name,
                 category = it.categoryId?.let { id -> categories.getValue(id).name },
                 amountCents = it.amountCents,
                 note = it.note,
+                accountCode = accounts.getValue(it.accountId).code,
+                toAccountCode = to?.code,
             )
         }
     }

@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
 import app.tasca.data.Category
 import app.tasca.data.CategoryKind
 import app.tasca.data.Recurring
@@ -273,9 +274,9 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
         }
-        Keypad(draft, "Save", error) {
+        Keypad(draft, "Save", error, dropUnlessResumed {
             error = draft.problem() ?: if (draft.note.isBlank()) "Give it a name" else null
-            if (error != null) return@Keypad
+            if (error != null) return@dropUnlessResumed
             val n = every.toIntOrNull()?.coerceAtLeast(1) ?: 1
             val base = Recurring(
                 id = id ?: 0, name = draft.note.trim(), kind = draft.kind, amountCents = draft.amount!!,
@@ -286,7 +287,7 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
             )
             vm.saveRecurring(base.copy(posted = alreadyPosted(original, base)))
             onDone()
-        }
+        })
     }
 
     if (pickStart || pickEnd) {
@@ -310,7 +311,7 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
             onDismissRequest = { confirmDelete = false },
             title = { Text("Delete this regular payment?") },
             text = { Text("Transactions it already recorded are kept.") },
-            confirmButton = { TextButton(onClick = { vm.deleteRecurring(id!!); confirmDelete = false; onDone() }) { Text("Delete") } },
+            confirmButton = { TextButton(onClick = dropUnlessResumed { vm.deleteRecurring(id!!); confirmDelete = false; onDone() }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
@@ -319,11 +320,13 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
 /**
  * After a schedule edit, new occurrences before the old next due date count as already posted,
  * so moving rent from the 1st to the 5th never records the current month twice.
+ * Resuming a paused payment also skips the occurrences missed while it was paused.
  */
-fun alreadyPosted(original: Recurring?, updated: Recurring): Int {
-    if (original == null || original.posted == 0) return 0
-    val due = original.nextDate
+fun alreadyPosted(original: Recurring?, updated: Recurring, today: LocalDate = LocalDate.now()): Int {
+    if (original == null) return 0
+    fun date(n: Int) = updated.frequency.occurrence(updated.startDate, updated.every, n)
     var n = 0
-    while (updated.frequency.occurrence(updated.startDate, updated.every, n).isBefore(due)) n++
+    if (original.posted > 0) while (date(n).isBefore(original.nextDate)) n++
+    if (!original.active && updated.active) while (date(n).isBefore(today)) n++
     return n
 }
