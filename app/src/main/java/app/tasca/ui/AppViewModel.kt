@@ -40,12 +40,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Currency
 
-data class ActivityFilter(
-    val period: Period = Period.of(PeriodKind.MONTH),
-    val accountId: Long? = null,
-    val categoryId: Long? = null,
-    val query: String = "",
-)
+enum class HomeView { CATEGORIES, TRANSACTIONS }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -72,6 +67,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val selectedAccount = MutableStateFlow<Long?>(null)
     val homePeriod = MutableStateFlow(Period.of(PeriodKind.MONTH))
     val homeKind = MutableStateFlow(TxnKind.EXPENSE)
+    val homeView = MutableStateFlow(HomeView.CATEGORIES)
+    /** Narrows the transaction list to one category; set by tapping the category. */
+    val homeCategory = MutableStateFlow<Long?>(null)
+    val homeQuery = MutableStateFlow("")
+    /** In the transaction list, only expenses or only income; null shows everything, transfers included. */
+    val homeListKind = MutableStateFlow<TxnKind?>(null)
+
+    val homeRows = combine(selectedAccount, homePeriod, homeCategory, homeQuery) { acc, p, cat, q ->
+        dao.txnRows(p.start, p.end, acc, cat, q.trim(), 2000)
+    }.flatMapLatest { it }.state(emptyList())
+
+    /** Shows one account's whole history as a list, as "See transactions" on Accounts asks. */
+    fun showTransactions(accountId: Long) {
+        selectedAccount.value = accountId
+        homePeriod.value = Period.of(PeriodKind.ALL)
+        homeCategory.value = null
+        homeQuery.value = ""
+        homeListKind.value = null
+        homeView.value = HomeView.TRANSACTIONS
+    }
 
     val homeTotals = combine(selectedAccount, homePeriod, homeKind, ::Triple)
         .flatMapLatest { (acc, p, kind) -> dao.categoryTotals(kind, p.start, p.end, acc) }
@@ -157,11 +172,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrNull()
     }
 
-    val activityFilter = MutableStateFlow(ActivityFilter())
-    val activity = activityFilter
-        .flatMapLatest { f -> dao.txnRows(f.period.start, f.period.end, f.accountId, f.categoryId, f.query.trim(), 2000) }
-        .state(emptyList())
-
     init {
         Money.currency = Currency.getInstance(_currency.value)
         viewModelScope.launch {
@@ -198,7 +208,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteAccount(id: Long) = io {
         ledger.deleteAccount(id)
         if (selectedAccount.value == id) selectedAccount.value = null
-        if (activityFilter.value.accountId == id) activityFilter.value = activityFilter.value.copy(accountId = null)
     }
 
     fun saveCategory(c: Category) = io {

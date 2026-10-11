@@ -8,18 +8,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DonutLarge
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -29,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,45 +54,89 @@ import app.tasca.domain.Money
 import app.tasca.domain.Period
 import app.tasca.domain.PeriodKind
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.HomeView
 import app.tasca.ui.components.Donut
 import app.tasca.ui.components.EmptyHint
 import app.tasca.ui.components.LegendRow
 import app.tasca.ui.components.Slice
+import app.tasca.ui.components.TxnItem
 import app.tasca.ui.components.kindColor
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+/**
+ * The month at a glance and every transaction in it: one header (account, period, expenses and income),
+ * then either the category breakdown or the transaction list, switched in place.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    vm: AppViewModel,
-    contentPadding: PaddingValues,
-    onOpenActivity: (categoryId: Long?, period: Period) -> Unit,
-    onSettings: () -> Unit,
-) {
+fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long) -> Unit, onSettings: () -> Unit) {
     val balances by vm.balances.collectAsStateWithLifecycle()
     val selected by vm.selectedAccount.collectAsStateWithLifecycle()
     val period by vm.homePeriod.collectAsStateWithLifecycle()
     val kind by vm.homeKind.collectAsStateWithLifecycle()
     val totals by vm.homeTotals.collectAsStateWithLifecycle()
     val summary by vm.homeSummary.collectAsStateWithLifecycle()
+    val view by vm.homeView.collectAsStateWithLifecycle()
+    val categoryId by vm.homeCategory.collectAsStateWithLifecycle()
+    val query by vm.homeQuery.collectAsStateWithLifecycle()
+    val rows by vm.homeRows.collectAsStateWithLifecycle()
+    val listKind by vm.homeListKind.collectAsStateWithLifecycle()
+    val categories by vm.categories.collectAsStateWithLifecycle()
+    var searching by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
 
     Column {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
             Box(Modifier.weight(1f)) { AccountPicker(balances, selected) { vm.selectedAccount.value = it } }
+            IconButton(onClick = {
+                searching = !searching
+                if (searching) vm.homeView.value = HomeView.TRANSACTIONS else vm.homeQuery.value = ""
+            }) { Icon(if (searching) Icons.Outlined.SearchOff else Icons.Outlined.Search, "Search") }
             IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Settings") }
         }
         LazyColumn(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 88.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item { PeriodBar(period) { vm.homePeriod.value = it } }
+            if (searching) item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { vm.homeQuery.value = it },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) IconButton(onClick = { vm.homeQuery.value = "" }) { Icon(Icons.Outlined.Close, "Clear") }
+                    },
+                    placeholder = { Text("Search notes, categories, accounts") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { PeriodBar(period) { vm.homePeriod.value = it } }
+                    SingleChoiceSegmentedButtonRow(Modifier.width(112.dp)) {
+                        listOf(
+                            HomeView.CATEGORIES to Icons.Outlined.DonutLarge,
+                            HomeView.TRANSACTIONS to Icons.AutoMirrored.Outlined.ViewList,
+                        ).forEachIndexed { i, (v, icon) ->
+                            SegmentedButton(view == v, { vm.homeView.value = v }, SegmentedButtonDefaults.itemShape(i, 2), icon = {}) {
+                                Icon(icon, if (v == HomeView.CATEGORIES) "Categories" else "Transactions", Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 val spent = summary.filter { it.kind == TxnKind.EXPENSE }.sumOf { it.totalCents }
                 val earned = summary.filter { it.kind == TxnKind.INCOME }.sumOf { it.totalCents }
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     listOf(TxnKind.EXPENSE to spent, TxnKind.INCOME to earned).forEachIndexed { i, (k, cents) ->
-                        SegmentedButton(kind == k, { vm.homeKind.value = k }, SegmentedButtonDefaults.itemShape(i, 2), icon = {}) {
+                        val on = if (view == HomeView.CATEGORIES) kind == k else listKind == k
+                        SegmentedButton(on, {
+                            if (view == HomeView.CATEGORIES) vm.homeKind.value = k
+                            else vm.homeListKind.value = if (listKind == k) null else k
+                        }, SegmentedButtonDefaults.itemShape(i, 2), icon = {}) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(if (k == TxnKind.EXPENSE) "Expenses" else "Income", style = MaterialTheme.typography.labelMedium)
                                 Text(Money.format(cents), fontWeight = FontWeight.Bold, color = kindColor(k))
@@ -90,19 +145,46 @@ fun HomeScreen(
                     }
                 }
             }
-            item {
+            if (view == HomeView.CATEGORIES) {
                 val sum = totals.sumOf { it.totalCents }
-                Donut(totals.map { Slice(it.totalCents, Color(it.color)) }, Modifier.fillMaxWidth().height(220.dp)) {
-                    Text(Money.format(sum, compact = true), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                }
-            }
-            if (totals.isEmpty()) item { EmptyHint("Nothing in this period") }
-            val sum = totals.sumOf { it.totalCents }
-            totals.forEach { t ->
-                item(key = t.categoryId) {
-                    LegendRow(t.icon, Color(t.color), t.name, if (sum > 0) Math.round(t.totalCents * 100.0 / sum).toInt() else 0, t.totalCents) {
-                        onOpenActivity(t.categoryId, period)
+                if (totals.isEmpty()) item { EmptyHint("Nothing in this period") }
+                else item {
+                    Donut(totals.map { Slice(it.totalCents, Color(it.color)) }, Modifier.fillMaxWidth().height(170.dp)) {
+                        Text(Money.format(sum, compact = true), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
+                }
+                totals.forEach { t ->
+                    item(key = t.categoryId) {
+                        LegendRow(t.icon, Color(t.color), t.name, if (sum > 0) Math.round(t.totalCents * 100.0 / sum).toInt() else 0, t.totalCents) {
+                            vm.homeCategory.value = t.categoryId
+                            vm.homeListKind.value = null
+                            vm.homeView.value = HomeView.TRANSACTIONS
+                        }
+                    }
+                }
+            } else {
+                categories.firstOrNull { it.id == categoryId }?.let { cat ->
+                    item {
+                        InputChip(
+                            selected = true, onClick = { vm.homeCategory.value = null },
+                            label = { Text(cat.name) },
+                            trailingIcon = { Icon(Icons.Outlined.Close, "Remove filter") },
+                        )
+                    }
+                }
+                val shown = if (listKind == null) rows else rows.filter { it.kind == listKind }
+                if (shown.isEmpty()) item { EmptyHint("No transactions match") }
+                shown.groupBy { it.date }.forEach { (date, dayRows) ->
+                    item(key = "d$date") {
+                        val net = dayRows.sumOf {
+                            when (it.kind) { TxnKind.INCOME -> it.amountCents; TxnKind.EXPENSE -> -it.amountCents; else -> 0 }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(relativeDay(date), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            if (net != 0L) Text(Money.signed(net), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    items(dayRows, key = { it.id }) { TxnItem(it, selected) { onEditTxn(it.id) } }
                 }
             }
         }

@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.EventRepeat
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,11 +50,8 @@ import androidx.work.WorkerParameters
 import app.tasca.data.Ledger
 import app.tasca.data.TxnKind
 import app.tasca.domain.Period
-import app.tasca.domain.PeriodKind
-import app.tasca.ui.ActivityFilter
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.screens.AccountsScreen
-import app.tasca.ui.screens.ActivityScreen
 import app.tasca.ui.screens.CategoriesScreen
 import app.tasca.ui.screens.EditHoldingScreen
 import app.tasca.ui.screens.EditRecurringScreen
@@ -90,7 +86,6 @@ class RecurringWorker(context: Context, params: WorkerParameters) : CoroutineWor
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     HOME("home", "Home", Icons.Outlined.Home),
     ACCOUNTS("accounts", "Accounts", Icons.Outlined.AccountBalanceWallet),
-    ACTIVITY("activity", "Activity", Icons.Outlined.ReceiptLong),
     STATS("stats", "Stats", Icons.Outlined.BarChart),
     PLAN("plan", "Plan", Icons.Outlined.EventRepeat),
 }
@@ -132,7 +127,7 @@ private fun AppRoot(vm: AppViewModel) {
             }
         },
         floatingActionButton = {
-            if (tab == Tab.HOME || tab == Tab.ACTIVITY) {
+            if (tab == Tab.HOME) {
                 FloatingActionButton(
                     onClick = { nav.navigate("txn") },
                     containerColor = MaterialTheme.colorScheme.secondary,
@@ -145,24 +140,15 @@ private fun AppRoot(vm: AppViewModel) {
         Box(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = if (tab == null) padding.calculateBottomPadding() else 0.dp)) {
             NavHost(nav, startDestination = Tab.HOME.route) {
                 composable(Tab.HOME.route) {
-                    HomeScreen(
-                        vm, padding,
-                        onOpenActivity = { categoryId, period ->
-                            vm.activityFilter.value = vm.activityFilter.value.copy(
-                                period = period, categoryId = categoryId, accountId = vm.selectedAccount.value, query = "",
-                            )
-                            nav.goTab(Tab.ACTIVITY.route)
-                        },
-                        onSettings = { nav.navigate("settings") },
-                    )
+                    HomeScreen(vm, padding, onEditTxn = { nav.navigate("txn?id=$it") }, onSettings = { nav.navigate("settings") })
                 }
                 composable(Tab.ACCOUNTS.route) {
                     AccountsScreen(
                         vm, padding,
                         onTransfer = { nav.navigate("txn?kind=TRANSFER") },
                         onTransactions = { id ->
-                            vm.activityFilter.value = ActivityFilter(period = Period.of(PeriodKind.ALL), accountId = id)
-                            nav.goTab(Tab.ACTIVITY.route)
+                            vm.showTransactions(id)
+                            nav.goTab(Tab.HOME.route)
                         },
                         onInvestments = { nav.navigate("stocks") },
                     )
@@ -174,7 +160,6 @@ private fun AppRoot(vm: AppViewModel) {
                     "holding?id={id}",
                     arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = -1L }),
                 ) { e -> EditHoldingScreen(vm, e.arguments!!.getLong("id").takeIf { it >= 0 }) { nav.popBackStack() } }
-                composable(Tab.ACTIVITY.route) { ActivityScreen(vm, padding) { nav.navigate("txn?id=$it") } }
                 composable(Tab.STATS.route) { StatsScreen(vm, padding) }
                 composable(Tab.PLAN.route) {
                     PlanScreen(vm, padding) { id -> nav.navigate(if (id == null) "recurring" else "recurring?id=$id") }
