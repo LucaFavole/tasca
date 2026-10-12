@@ -121,11 +121,13 @@ interface LedgerDao {
     @Query("SELECT * FROM recurring WHERE active = 1")
     suspend fun activeRecurring(): List<Recurring>
 
+    @Query("SELECT * FROM recurring") suspend fun allRecurring(): List<Recurring>
     @Query("SELECT * FROM recurring WHERE id = :id") suspend fun recurring(id: Long): Recurring?
     @Upsert suspend fun upsertRecurring(r: Recurring): Long
     @Query("DELETE FROM recurring WHERE id = :id") suspend fun deleteRecurring(id: Long)
 
     @Query("SELECT * FROM budget") fun budgetsFlow(): Flow<List<Budget>>
+    @Query("SELECT * FROM budget") suspend fun budgets(): List<Budget>
     @Upsert suspend fun upsertBudget(b: Budget)
     @Query("DELETE FROM budget WHERE categoryId = :categoryId") suspend fun deleteBudget(categoryId: Long)
 

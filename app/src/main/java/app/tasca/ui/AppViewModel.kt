@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.tasca.Reminder
 import app.tasca.data.Account
 import app.tasca.data.Budget
 import app.tasca.data.Category
@@ -251,15 +252,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val sheets = resolver.openInputStream(uri)!!.use { Xlsx.read(it) }
         val parsed = LedgerSheets.read(sheets)
         val r = ledger.import(parsed)
+        if (r.fresh) applySettings(parsed.config.settings)
         val extra = if (parsed.problems.isEmpty()) "" else ", ${parsed.problems.size} rows unreadable"
         val kept = if (r.keptAccounts == 0) "" else ". ${r.keptAccounts} accounts already in use kept their current balance and investments"
-        say("Imported ${r.added} (${r.skipped} already present$extra). New: ${r.newAccounts} accounts, ${r.newCategories} categories$kept")
+        val config = listOfNotNull(
+            "${r.newRecurring} regular payments".takeIf { r.newRecurring > 0 },
+            "${r.newBudgets} budgets".takeIf { r.newBudgets > 0 },
+        ).joinToString("") { ", $it" }
+        say("Imported ${r.added} (${r.skipped} already present$extra). New: ${r.newAccounts} accounts, ${r.newCategories} categories$config$kept")
     }
 
     fun exportExcel(uri: Uri) = io {
-        val book = ledger.exportBook(_currency.value)
+        val settings = mapOf(
+            "currency" to _currency.value, "theme" to _theme.value.name, "taxRate" to taxRatePct.toString(),
+            "reminder" to Reminder.isOn(getApplication()).toString(),
+        )
+        val book = ledger.exportBook(_currency.value, settings)
         getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { Xlsx.write(book, it) }
-        say("Exported ${book.take(3).sumOf { it.rows.size - 2 }} transactions, accounts and investments")
+        say("Exported ${book.take(3).sumOf { it.rows.size - 2 }} transactions, with accounts, regular payments, budgets and settings")
+    }
+
+    /** Settings restored from a backup onto a phone that had no data yet; unknown or broken values are skipped. */
+    private suspend fun applySettings(settings: Map<String, String>) = withContext(Dispatchers.Main) {
+        settings["currency"]?.let(::setCurrency)
+        settings["theme"]?.let { t -> ThemeMode.entries.firstOrNull { it.name == t } }?.let(::setTheme)
+        settings["taxRate"]?.toDoubleOrNull()?.takeIf { it in 0.0..100.0 }?.let { taxRatePct = it }
+        settings["reminder"]?.toBooleanStrictOrNull()?.let { Reminder.setOn(getApplication(), it) }
     }
 
     fun exportFileName(): String = "tasca_${LocalDate.now()}.xlsx"

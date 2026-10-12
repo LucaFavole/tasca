@@ -1,6 +1,8 @@
 package app.tasca.io
 
+import app.tasca.data.CategoryKind
 import app.tasca.data.TxnKind
+import app.tasca.domain.Frequency
 import app.tasca.domain.Money
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -26,12 +28,41 @@ data class HoldingSheetRow(
     val account: String, val symbol: String, val name: String, val quantity: Double, val investedCents: Long, val accountCode: String? = null,
 )
 
-data class ParsedWorkbook(
-    val rows: List<SheetRow>,
-    val problems: List<String>,
+/** A regular payment with accounts and category by name; [posted] keeps a restore from posting past occurrences again. */
+data class RecurringSheetRow(
+    val name: String,
+    val kind: TxnKind,
+    val amountCents: Long,
+    val account: String,
+    val accountCode: String?,
+    val toAccount: String?,
+    val toAccountCode: String?,
+    val category: String?,
+    val frequency: Frequency,
+    val every: Int,
+    val start: LocalDate,
+    val end: LocalDate?,
+    val posted: Int,
+    val active: Boolean,
+)
+
+data class CategorySheetRow(val name: String, val kind: CategoryKind, val color: Int, val icon: String)
+
+/** A monthly limit on an expense category. */
+data class BudgetSheetRow(val category: String, val monthlyCents: Long)
+
+/** Everything a backup holds besides the transactions; empty in files from the previous app. */
+data class Config(
     val accounts: List<AccountSheetRow> = emptyList(),
     val holdings: List<HoldingSheetRow> = emptyList(),
+    val recurring: List<RecurringSheetRow> = emptyList(),
+    val categories: List<CategorySheetRow> = emptyList(),
+    val budgets: List<BudgetSheetRow> = emptyList(),
+    /** App settings by key, e.g. "currency" to "EUR". */
+    val settings: Map<String, String> = emptyMap(),
 )
+
+data class ParsedWorkbook(val rows: List<SheetRow>, val problems: List<String>, val config: Config = Config())
 
 /**
  * The workbook layout: one sheet each for expenses, income and transfers, with the same headers the
@@ -69,12 +100,25 @@ object LedgerSheets {
     private val ACCOUNTS_HEADER = listOf("Account", "Opening balance", "Deleted", "Code")
     private val HOLDINGS_HEADER = listOf("Account", "Symbol", "Name", "Shares", "Total paid", "Account code")
 
-    fun write(
-        rows: List<SheetRow>,
-        currency: String,
-        accounts: List<AccountSheetRow> = emptyList(),
-        holdings: List<HoldingSheetRow> = emptyList(),
-    ): List<Sheet> {
+    private val RECURRING_HEADER = listOf(
+        "Name", "Type", "Amount", "Account", "Account code", "To account", "To account code", "Category",
+        "Frequency", "Every", "Start", "End", "Already posted", "Active",
+    )
+    private val CATEGORIES_HEADER = listOf("Category", "Type", "Color", "Icon")
+    private val BUDGETS_HEADER = listOf("Category", "Monthly budget")
+    private val SETTINGS_HEADER = listOf("Setting", "Value")
+
+    /** Sheets that hold configuration, never transactions, whatever their cells say. */
+    private val CONFIG_SHEETS = setOf("accounts", "investments", "regular payments", "categories", "budgets", "settings")
+
+    private fun table(name: String, header: List<String>, rows: List<List<Cell>>) =
+        Sheet(name, listOf(listOf(Cell.Text(name.lowercase())), header.map { Cell.Text(it) }) + rows)
+
+    private fun text(s: String?) = Cell.Text(s.orEmpty())
+    private fun yes(b: Boolean) = Cell.Text(if (b) "yes" else "")
+    private fun money(cents: Long) = Cell.Num(Money.toDouble(cents))
+
+    fun write(rows: List<SheetRow>, currency: String, config: Config = Config()): List<Sheet> {
         fun txnSheet(name: String, title: String, kind: TxnKind) = Sheet(
             name,
             listOf(listOf(Cell.Text(title)), TXN_HEADER.map { Cell.Text(it) }) +
@@ -102,18 +146,22 @@ object LedgerSheets {
             txnSheet("Expenses", "expenses list", TxnKind.EXPENSE),
             txnSheet("Income", "income list", TxnKind.INCOME),
             transfers,
-            Sheet("Accounts", listOf(listOf(Cell.Text("accounts")), ACCOUNTS_HEADER.map { Cell.Text(it) }) + accounts.map {
+            table("Accounts", ACCOUNTS_HEADER, config.accounts.map { listOf(text(it.name), money(it.openingCents), yes(it.deleted), text(it.code)) }),
+            table("Investments", HOLDINGS_HEADER, config.holdings.map {
+                listOf(text(it.account), text(it.symbol), text(it.name), Cell.Num(it.quantity), money(it.investedCents), text(it.accountCode))
+            }),
+            table("Regular payments", RECURRING_HEADER, config.recurring.map {
                 listOf(
-                    Cell.Text(it.name), Cell.Num(Money.toDouble(it.openingCents)), Cell.Text(if (it.deleted) "yes" else ""),
-                    Cell.Text(it.code.orEmpty()),
+                    text(it.name), text(it.kind.name), money(it.amountCents), text(it.account), text(it.accountCode),
+                    text(it.toAccount), text(it.toAccountCode), text(it.category), text(it.frequency.name), Cell.Num(it.every.toDouble()),
+                    Cell.Date(it.start), it.end?.let { e -> Cell.Date(e) } ?: Cell.Empty, Cell.Num(it.posted.toDouble()), yes(it.active),
                 )
             }),
-            Sheet("Investments", listOf(listOf(Cell.Text("investments")), HOLDINGS_HEADER.map { Cell.Text(it) }) + holdings.map {
-                listOf(
-                    Cell.Text(it.account), Cell.Text(it.symbol), Cell.Text(it.name), Cell.Num(it.quantity),
-                    Cell.Num(Money.toDouble(it.investedCents)), Cell.Text(it.accountCode.orEmpty()),
-                )
+            table("Categories", CATEGORIES_HEADER, config.categories.map {
+                listOf(text(it.name), text(it.kind.name), text("#%08X".format(it.color)), text(it.icon))
             }),
+            table("Budgets", BUDGETS_HEADER, config.budgets.map { listOf(text(it.category), money(it.monthlyCents)) }),
+            table("Settings", SETTINGS_HEADER, config.settings.map { (k, v) -> listOf(text(k), text(v)) }),
         )
     }
 
@@ -131,6 +179,7 @@ object LedgerSheets {
         val rows = mutableListOf<SheetRow>()
         val problems = mutableListOf<String>()
         for (sheet in sheets) {
+            if (sheet.name.lowercase() in CONFIG_SHEETS) continue
             val headerIndex = sheet.rows.indexOfFirst { r -> r.any { c -> c is Cell.Text && Field.DATE.matches(c.value) } }
             if (headerIndex < 0) continue
             val header = sheet.rows[headerIndex].map { (it as? Cell.Text)?.value?.trim()?.lowercase().orEmpty() }
@@ -189,7 +238,45 @@ object LedgerSheets {
                 r.getOrNull(5)?.text()?.ifEmpty { null },
             )
         }
-        return ParsedWorkbook(rows, problems, accounts, holdings)
+        val recurring = body(sheets, "Regular payments", "Name").mapIndexedNotNull { i, r ->
+            fun at(c: Int) = r.getOrNull(c) ?: Cell.Empty
+            fun opt(c: Int) = at(c).text().ifEmpty { null }
+            val row = runCatching {
+                RecurringSheetRow(
+                    name = at(0).text(),
+                    kind = TxnKind.valueOf(at(1).text()),
+                    amountCents = Money.fromDouble(at(2).num()!!),
+                    account = opt(3)!!,
+                    accountCode = opt(4), toAccount = opt(5), toAccountCode = opt(6), category = opt(7),
+                    frequency = Frequency.valueOf(at(8).text()),
+                    every = at(9).num()!!.toInt(),
+                    start = dateOf(at(10))!!,
+                    end = dateOf(at(11)),
+                    posted = at(12).num()!!.toInt(),
+                    active = at(13).text() == "yes",
+                )
+            }.getOrNull()
+            val valid = row != null && row.amountCents > 0 && row.every > 0 && row.posted >= 0 &&
+                if (row.kind == TxnKind.TRANSFER) row.toAccount != null else row.category != null
+            if (!valid) problems += "Regular payments row ${i + 3}: unreadable"
+            row.takeIf { valid }
+        }
+        val categories = body(sheets, "Categories", "Category").mapNotNull { r ->
+            val name = r.getOrNull(0)?.text().orEmpty()
+            val kind = runCatching { CategoryKind.valueOf(r.getOrNull(1)?.text().orEmpty()) }.getOrNull()
+            val color = r.getOrNull(2)?.text()?.removePrefix("#")?.toLongOrNull(16)?.toInt()
+            val icon = r.getOrNull(3)?.text().orEmpty()
+            if (name.isEmpty() || kind == null || color == null || icon.isEmpty()) null else CategorySheetRow(name, kind, color, icon)
+        }
+        val budgets = body(sheets, "Budgets", "Category").mapNotNull { r ->
+            val name = r.getOrNull(0)?.text().orEmpty()
+            val limit = r.getOrNull(1)?.num()
+            if (name.isEmpty() || limit == null || limit <= 0) null else BudgetSheetRow(name, Money.fromDouble(limit))
+        }
+        val settings = body(sheets, "Settings", "Setting").mapNotNull { r ->
+            r.getOrNull(0)?.text()?.ifEmpty { null }?.let { it to r.getOrNull(1)?.text().orEmpty() }
+        }.toMap()
+        return ParsedWorkbook(rows, problems, Config(accounts, holdings, recurring, categories, budgets, settings))
     }
 
     private fun Field.matches(s: String) = names.contains(s.trim().lowercase())

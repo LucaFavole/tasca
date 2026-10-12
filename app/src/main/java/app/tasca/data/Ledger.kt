@@ -15,9 +15,13 @@ import app.tasca.domain.MonthLeft
 import app.tasca.domain.Trade
 import app.tasca.domain.TradeSide
 import app.tasca.io.AccountSheetRow
+import app.tasca.io.BudgetSheetRow
+import app.tasca.io.CategorySheetRow
+import app.tasca.io.Config
 import app.tasca.io.HoldingSheetRow
 import app.tasca.io.LedgerSheets
 import app.tasca.io.ParsedWorkbook
+import app.tasca.io.RecurringSheetRow
 import app.tasca.io.SheetRow
 import app.tasca.io.Yahoo
 import java.time.LocalDate
@@ -46,8 +50,14 @@ abstract class AppDb : RoomDatabase() {
     }
 }
 
-/** [keptAccounts]: accounts already in use whose opening balance, state or investments in the file were ignored. */
-data class ImportResult(val added: Int, val skipped: Int, val newAccounts: Int, val newCategories: Int, val keptAccounts: Int)
+/**
+ * [keptAccounts]: accounts already in use whose opening balance, state or investments in the file were ignored.
+ * [fresh]: the phone had no transactions before, so the file's settings may replace the current ones.
+ */
+data class ImportResult(
+    val added: Int, val skipped: Int, val newAccounts: Int, val newCategories: Int, val keptAccounts: Int,
+    val newRecurring: Int = 0, val newBudgets: Int = 0, val fresh: Boolean = false,
+)
 
 /** The single entry point for reading and changing the user's money data. */
 class Ledger(private val db: AppDb) {
@@ -163,15 +173,26 @@ class Ledger(private val db: AppDb) {
      * A row identical to one already stored is skipped, so importing the same file twice adds nothing,
      * while genuine same-day duplicates inside one file are all kept.
      * Opening balances, deleted state and investments from the file apply only to accounts that were still empty,
-     * so restoring an old backup never overwrites what changed on the phone since.
+     * so restoring an old backup never overwrites what changed on the phone since. Likewise categories keep their
+     * look, a regular payment already present (same name, type, account and start) is skipped, and a budget is
+     * only set on a category without one. A restored regular payment keeps its posted count, so the occurrences
+     * already in the file are not posted again.
      */
     suspend fun import(book: ParsedWorkbook): ImportResult = db.withTransaction {
         val rows = book.rows
         val accounts = dao.accounts().toMutableList()
         val empty = accounts.filter { dao.accountUsage(it.id) == 0 && dao.holdingCount(it.id) == 0 }.map { it.id }.toMutableSet()
+        val config = book.config
         val categories = dao.categories().associateBy { it.kind to it.name.lowercase() }.toMutableMap()
         var newAccounts = 0
         var newCategories = 0
+        for (c in config.categories) {
+            categories.getOrPut(c.kind to c.name.lowercase()) {
+                newCategories++
+                val made = Category(name = c.name, kind = c.kind, color = c.color, icon = c.icon)
+                made.copy(id = dao.upsertCategory(made))
+            }
+        }
 
         suspend fun account(name: String, code: String?): Long {
             val found = if (code != null) accounts.firstOrNull { it.code == code }
@@ -189,6 +210,7 @@ class Ledger(private val db: AppDb) {
         }.id
 
         val existing = dao.allTxns().groupingBy(::dedupeKey).eachCount().toMutableMap()
+        val fresh = existing.isEmpty()
         val toInsert = mutableListOf<Txn>()
         var skipped = 0
         for (row in rows) {
@@ -213,30 +235,69 @@ class Ledger(private val db: AppDb) {
             }
         }
         val kept = mutableSetOf<Long>()
-        for (a in book.accounts) {
+        for (a in config.accounts) {
             val current = accounts.first { it.id == account(a.name, a.code) }
             if (current.id in empty) dao.upsertAccount(current.copy(name = a.name, initialCents = a.openingCents, deleted = a.deleted))
             else if (current.initialCents != a.openingCents || current.deleted != a.deleted) kept += current.id
         }
-        for (h in book.holdings) {
+        for (h in config.holdings) {
             val accountId = account(h.account, h.accountCode)
             if (accountId in empty) dao.upsertHolding(Holding(0, accountId, h.symbol, h.name, h.quantity, h.investedCents))
             else kept += accountId
         }
         dao.insertTxns(toInsert)
-        ImportResult(toInsert.size, skipped, newAccounts, newCategories, kept.size)
+
+        val recurring = dao.allRecurring().map { listOf(it.name.lowercase(), it.kind, it.accountId, it.startDate) }.toMutableSet()
+        var newRecurring = 0
+        for (r in config.recurring) {
+            val accountId = account(r.account, r.accountCode)
+            if (!recurring.add(listOf(r.name.lowercase(), r.kind, accountId, r.start))) continue
+            dao.upsertRecurring(Recurring(
+                name = r.name, kind = r.kind, amountCents = r.amountCents, accountId = accountId,
+                toAccountId = r.toAccount?.let { account(it, r.toAccountCode) },
+                categoryId = r.category?.takeIf { r.kind != TxnKind.TRANSFER }?.let {
+                    category(it, if (r.kind == TxnKind.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE)
+                },
+                frequency = r.frequency, every = r.every, startDate = r.start, endDate = r.end, posted = r.posted, active = r.active,
+            ))
+            newRecurring++
+        }
+        val budgeted = dao.budgets().map { it.categoryId }.toMutableSet()
+        var newBudgets = 0
+        for (b in config.budgets) {
+            val id = category(b.category, CategoryKind.EXPENSE)
+            if (budgeted.add(id)) { dao.upsertBudget(Budget(id, b.monthlyCents)); newBudgets++ }
+        }
+        ImportResult(toInsert.size, skipped, newAccounts, newCategories, kept.size, newRecurring, newBudgets, fresh)
     }
 
-    suspend fun exportBook(currency: String): List<app.tasca.io.Sheet> {
+    /** The whole ledger as a workbook; [settings] are the app settings to carry along, by key. */
+    suspend fun exportBook(currency: String, settings: Map<String, String> = emptyMap()): List<app.tasca.io.Sheet> {
         val accounts = dao.accounts()
         val byId = accounts.associateBy { it.id }
+        val categories = dao.categories()
+        val categoryById = categories.associateBy { it.id }
         return LedgerSheets.write(
             exportRows(), currency,
-            accounts.map { AccountSheetRow(it.name, it.initialCents, it.deleted, it.code) },
-            dao.holdings().map {
-                val a = byId.getValue(it.accountId)
-                HoldingSheetRow(a.name, it.symbol, it.name, it.quantity, it.investedCents, a.code)
-            },
+            Config(
+                accounts = accounts.map { AccountSheetRow(it.name, it.initialCents, it.deleted, it.code) },
+                holdings = dao.holdings().map {
+                    val a = byId.getValue(it.accountId)
+                    HoldingSheetRow(a.name, it.symbol, it.name, it.quantity, it.investedCents, a.code)
+                },
+                recurring = dao.allRecurring().map {
+                    val a = byId.getValue(it.accountId)
+                    val to = it.toAccountId?.let(byId::getValue)
+                    RecurringSheetRow(
+                        it.name, it.kind, it.amountCents, a.name, a.code, to?.name, to?.code, it.categoryId?.let { id -> categoryById.getValue(id).name },
+                        it.frequency, it.every, it.startDate, it.endDate, it.posted, it.active,
+                    )
+                },
+                categories = categories.sortedWith(compareBy({ it.kind }, { it.name.lowercase() }))
+                    .map { CategorySheetRow(it.name, it.kind, it.color, it.icon) },
+                budgets = dao.budgets().map { BudgetSheetRow(categoryById.getValue(it.categoryId).name, it.monthlyCents) },
+                settings = settings,
+            ),
         )
     }
 
