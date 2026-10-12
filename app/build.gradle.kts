@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "app.tasca"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.tasca"

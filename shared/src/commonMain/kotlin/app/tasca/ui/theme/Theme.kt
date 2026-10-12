@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 data class MoneyColors(val income: Color, val expense: Color, val transfer: Color)
 
 val LocalMoneyColors = staticCompositionLocalOf { MoneyColors(Color.Green, Color.Red, Color.Blue) }

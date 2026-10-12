@@ -5,6 +5,8 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.kotlin.multiplatform.library")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.compose")
     id("com.google.devtools.ksp")
     id("androidx.room")
 }
@@ -13,7 +15,7 @@ kotlin {
     compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
     android {
         namespace = "app.tasca.shared"
-        compileSdk = 35
+        compileSdk = 37
         minSdk = 26
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
@@ -39,6 +41,12 @@ kotlin {
             api("androidx.room:room-runtime:2.8.5")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
             implementation("androidx.datastore:datastore-preferences:1.2.1")
+            api("org.jetbrains.compose.runtime:runtime:1.12.1")
+            api("org.jetbrains.compose.foundation:foundation:1.12.1")
+            api("org.jetbrains.compose.ui:ui:1.12.1")
+            // The last stable Material 3; the releases paired with Compose 1.10 and later are alphas.
+            api("org.jetbrains.compose.material3:material3:1.9.0")
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
         }
         androidMain.dependencies {
             implementation("androidx.sqlite:sqlite-framework:2.6.2")
