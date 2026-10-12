@@ -5,9 +5,12 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.kotlin.multiplatform.library")
+    id("com.google.devtools.ksp")
+    id("androidx.room")
 }
 
 kotlin {
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
     android {
         namespace = "app.tasca.shared"
         compileSdk = 35
@@ -33,11 +36,21 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
+            api("androidx.room:room-runtime:2.8.5")
+            implementation("androidx.sqlite:sqlite-bundled:2.6.2")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
-            implementation("androidx.room:room-common:2.8.5")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
         }
     }
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
+}
+
+dependencies {
+    for (target in listOf("kspAndroid", "kspJvm", "kspIosArm64", "kspIosSimulatorArm64")) add(target, "androidx.room:room-compiler:2.8.5")
 }

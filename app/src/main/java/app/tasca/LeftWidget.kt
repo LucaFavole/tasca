@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.widget.RemoteViews
 import app.tasca.data.Ledger
+import app.tasca.data.get
 import app.tasca.domain.Money
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

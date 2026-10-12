@@ -1,16 +1,19 @@
 package app.tasca.data
 
-import android.content.Context
 import androidx.room.AutoMigration
+import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.DeleteColumn
 import androidx.room.RenameColumn
-import androidx.room.migration.AutoMigrationSpec
-import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.RoomDatabaseConstructor
 import androidx.room.TypeConverters
-import androidx.sqlite.db.SupportSQLiteDatabase
-import androidx.room.withTransaction
+import androidx.room.immediateTransaction
+import androidx.room.migration.AutoMigrationSpec
+import androidx.room.useWriterConnection
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import app.tasca.domain.MonthLeft
 import app.tasca.domain.Trade
 import app.tasca.domain.TradeSide
@@ -25,8 +28,11 @@ import app.tasca.io.RecurringSheetRow
 import app.tasca.io.SheetRow
 import app.tasca.io.Yahoo
 import app.tasca.domain.today
-import kotlinx.datetime.LocalDate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.first
+import kotlinx.datetime.LocalDate
+import kotlin.time.Clock
 
 @Database(
     entities = [Account::class, Category::class, Txn::class, Recurring::class, Budget::class, Holding::class, Quote::class],
@@ -39,6 +45,7 @@ import kotlinx.coroutines.flow.first
     ],
 )
 @TypeConverters(Converters::class)
+@ConstructedBy(AppDbConstructor::class)
 abstract class AppDb : RoomDatabase() {
     abstract fun dao(): LedgerDao
 
@@ -47,8 +54,13 @@ abstract class AppDb : RoomDatabase() {
     class TotalIsEverything : AutoMigrationSpec
 
     class AccountCodes : AutoMigrationSpec {
-        override fun onPostMigrate(db: SupportSQLiteDatabase) = db.execSQL("UPDATE account SET code = 'A' || id")
+        override fun onPostMigrate(connection: SQLiteConnection) = connection.execSQL("UPDATE account SET code = 'A' || id")
     }
+}
+
+@Suppress("KotlinNoActualForExpect")
+expect object AppDbConstructor : RoomDatabaseConstructor<AppDb> {
+    override fun initialize(): AppDb
 }
 
 /**
@@ -64,7 +76,7 @@ data class ImportResult(
 class Ledger(private val db: AppDb) {
     val dao = db.dao()
 
-    suspend fun ensureSeeded() = db.withTransaction {
+    suspend fun ensureSeeded() = transaction {
         if (dao.accounts().isEmpty() && dao.categories().isEmpty()) {
             saveAccount(Defaults.account("Main", 0))
             Defaults.categories().forEach { dao.upsertCategory(it) }
@@ -72,7 +84,7 @@ class Ledger(private val db: AppDb) {
     }
 
     /** Posts every due occurrence of every active recurring payment. Safe to call any number of times. */
-    suspend fun postDueRecurring(today: LocalDate = today()): Int = db.withTransaction {
+    suspend fun postDueRecurring(today: LocalDate = today()): Int = transaction {
         var count = 0
         for (r in dao.activeRecurring()) {
             var cur = r
@@ -93,7 +105,7 @@ class Ledger(private val db: AppDb) {
     }
 
     /** Inserts or updates an account, giving a new one the next free code. */
-    suspend fun saveAccount(a: Account): Long = db.withTransaction {
+    suspend fun saveAccount(a: Account): Long = transaction {
         dao.upsertAccount(if (a.code.isEmpty()) a.copy(code = nextCode(dao.accounts())) else a)
     }
 
@@ -101,7 +113,7 @@ class Ledger(private val db: AppDb) {
         "A" + ((accounts.mapNotNull { it.code.removePrefix("A").toIntOrNull() }.maxOrNull() ?: 0) + 1)
 
     /** Removes an unused account; an account with history is hidden instead, so the Total and history stay intact. */
-    suspend fun deleteAccount(id: Long) = db.withTransaction {
+    suspend fun deleteAccount(id: Long) = transaction {
         if (dao.accountUsage(id) == 0 && dao.holdingCount(id) == 0) dao.removeAccount(id)
         else {
             dao.hideAccount(id)
@@ -119,7 +131,7 @@ class Ledger(private val db: AppDb) {
             runCatching {
                 val p = Yahoo.price(symbol)
                 val rate = rates.getOrPut(p.currency) { Yahoo.rate(p.currency, appCurrency) }
-                Quote(symbol, p.price, p.previousClose, p.currency, rate, System.currentTimeMillis())
+                Quote(symbol, p.price, p.previousClose, p.currency, rate, Clock.System.now().toEpochMilliseconds())
             }.onFailure { failed += symbol; lastError = it }.getOrNull()
         }
         if (symbols.isNotEmpty() && quotes.isEmpty()) throw lastError!!
@@ -132,7 +144,7 @@ class Ledger(private val db: AppDb) {
      * holding, so the balance is unchanged; only the fee and, on a sale, the realised result become transactions.
      */
     suspend fun trade(holdingId: Long, side: TradeSide, shares: Double, unitPrice: Double, feeCents: Long, taxCents: Long, date: LocalDate) =
-        db.withTransaction {
+        transaction {
             val h = dao.holding(holdingId) ?: error("Holding not found")
             val p = Trade.apply(side, h.quantity, h.investedCents, shares, unitPrice)
             if (p.quantity == 0.0) dao.deleteHolding(h.id) else dao.upsertHolding(h.copy(quantity = p.quantity, investedCents = p.investedCents))
@@ -159,12 +171,12 @@ class Ledger(private val db: AppDb) {
     private suspend fun categoryId(name: String, kind: CategoryKind): Long =
         dao.category(kind, name)?.id ?: dao.upsertCategory(Defaults.category(name, kind, dao.categories().size))
 
-    suspend fun deleteCategory(id: Long, replacementId: Long?) = db.withTransaction {
+    suspend fun deleteCategory(id: Long, replacementId: Long?) = transaction {
         if (replacementId != null) dao.moveCategory(id, replacementId)
         dao.deleteCategory(id)
     }
 
-    suspend fun eraseAll() = db.withTransaction {
+    suspend fun eraseAll() = transaction {
         dao.clearHoldings(); dao.clearTxns(); dao.clearRecurring(); dao.clearBudgets(); dao.clearAccounts(); dao.clearCategories()
     }
 
@@ -179,7 +191,7 @@ class Ledger(private val db: AppDb) {
      * only set on a category without one. A restored regular payment keeps its posted count, so the occurrences
      * already in the file are not posted again.
      */
-    suspend fun import(book: ParsedWorkbook): ImportResult = db.withTransaction {
+    suspend fun import(book: ParsedWorkbook): ImportResult = transaction {
         val rows = book.rows
         val accounts = dao.accounts().toMutableList()
         val empty = accounts.filter { dao.accountUsage(it.id) == 0 && dao.holdingCount(it.id) == 0 }.map { it.id }.toMutableSet()
@@ -323,13 +335,15 @@ class Ledger(private val db: AppDb) {
 
     private fun dedupeKey(t: Txn) = listOf(t.kind, t.date, t.amountCents, t.accountId, t.toAccountId, t.categoryId, t.note.trim())
 
-    companion object {
-        @Volatile private var instance: Ledger? = null
+    internal fun close() = db.close()
 
-        fun get(context: Context): Ledger = instance ?: synchronized(this) {
-            instance ?: Ledger(
-                Room.databaseBuilder(context.applicationContext, AppDb::class.java, "tasca.db").build()
-            ).also { instance = it }
-        }
+    /** Runs [block] in one write transaction; DAO calls inside it join the transaction. */
+    private suspend fun <R> transaction(block: suspend () -> R): R =
+        db.useWriterConnection { it.immediateTransaction { block() } }
+
+    companion object {
+        /** The ledger in [builder]'s database, opened the same way on every platform. */
+        fun open(builder: RoomDatabase.Builder<AppDb>): Ledger =
+            Ledger(builder.setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build())
     }
 }

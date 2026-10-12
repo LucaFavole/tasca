@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.devtools.ksp")
 }
 
 android {
@@ -32,8 +31,6 @@ android {
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 
-ksp { arg("room.schemaLocation", "$projectDir/schemas") }
-
 dependencies {
     implementation(project(":shared"))
 
@@ -53,7 +50,4 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1")
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
-
-    implementation("androidx.room:room-runtime:2.8.5")
-    ksp("androidx.room:room-compiler:2.8.5")
 }

@@ -62,6 +62,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.work.WorkManager
 import app.tasca.data.Ledger
+import app.tasca.data.get
 import app.tasca.data.TxnKind
 import app.tasca.domain.Money
 import app.tasca.domain.Period
