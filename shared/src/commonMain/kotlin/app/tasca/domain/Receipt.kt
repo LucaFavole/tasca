@@ -5,9 +5,26 @@ import app.tasca.data.CategoryKind
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
+import kotlin.math.abs
 
 /** One printed row of a receipt as OCR read it, and its text height in pixels: totals are often printed larger. */
 data class ReceiptLine(val text: String, val height: Int = 0)
+
+/** A line of text as OCR found it, in pixels from the top left corner of the photo. */
+data class OcrLine(val text: String, val left: Int, val top: Int, val bottom: Int) {
+    val centerY: Int get() = (top + bottom) shr 1
+    val height: Int get() = bottom - top
+}
+
+/** Rebuilds printed rows: a label and its amount are often recognised as separate blocks side by side. */
+fun receiptRows(lines: List<OcrLine>): List<ReceiptLine> {
+    val rows = mutableListOf<MutableList<OcrLine>>()
+    for (line in lines.sortedBy { it.centerY }) {
+        val ref = rows.lastOrNull()?.first()
+        if (ref != null && abs(line.centerY - ref.centerY) < ref.height * 0.6) rows.last() += line else rows += mutableListOf(line)
+    }
+    return rows.map { row -> ReceiptLine(row.sortedBy { it.left }.joinToString("  ") { it.text }, row.maxOf { it.height }) }
+}
 
 /**
  * What a scanned receipt says. [confident] is false when the total had to be guessed (no clear total line,

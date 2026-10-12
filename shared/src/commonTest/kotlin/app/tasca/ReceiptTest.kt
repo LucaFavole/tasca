@@ -2,8 +2,10 @@ package app.tasca
 
 import app.tasca.data.Category
 import app.tasca.data.CategoryKind
+import app.tasca.domain.OcrLine
 import app.tasca.domain.ReceiptLine
 import app.tasca.domain.ReceiptParser
+import app.tasca.domain.receiptRows
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -80,5 +82,18 @@ class ReceiptTest {
         assertNull(r.amountCents)
         assertNull(r.date)
         assertNull(r.store)
+    }
+
+    @Test fun rowsJoinBlocksSideBySideAndKeepTheTallestHeight() {
+        val rows = receiptRows(
+            listOf(
+                OcrLine("PANE", left = 10, top = 200, bottom = 220),
+                // Close to TOTALE but not to 12,50, which opened the row: rows are measured from their first line.
+                OcrLine("IVA", left = 10, top = 114, bottom = 132),
+                OcrLine("TOTALE", left = 10, top = 104, bottom = 128),
+                OcrLine("12,50", left = 400, top = 100, bottom = 120),
+            ),
+        )
+        assertEquals(listOf(ReceiptLine("TOTALE  12,50", 24), ReceiptLine("IVA", 18), ReceiptLine("PANE", 20)), rows)
     }
 }
