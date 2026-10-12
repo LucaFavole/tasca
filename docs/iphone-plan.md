@@ -1,6 +1,8 @@
 # Tasca for iPhone: a plan
 
-Status: not started. Nobody is building this yet. This document records what an iPhone version needs, so the work can start later without redoing the research.
+Status: phases 1 to 4 are done on Windows, in October 2026. The logic, the Excel code and the database live in the `shared` module and compile for iOS (`:shared:compileKotlinIosArm64`). Nothing has run on iOS yet. Still open from phase 4: settings stay in SharedPreferences in `:app`, not DataStore. Android keeps the system SQLite through `AndroidSQLiteDriver`; iOS and the JVM tests use the bundled driver. The next steps need a Mac: phase 0, then running `:shared:iosSimulatorArm64Test`, then phase 5 onward.
+
+This document records what an iPhone version needs, so the work can continue later without redoing the research.
 
 Written in October 2026. Version numbers and Apple rules change every year. Re-check the facts marked with a source before you start. All sources are listed at the end.
 
