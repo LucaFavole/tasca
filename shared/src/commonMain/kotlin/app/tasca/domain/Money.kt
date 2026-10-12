@@ -35,3 +35,6 @@ object Money {
 
 /** [cents] of [currency] in the Italian format with [fractionDigits] decimals, rounding half even: "1.234,56 €". */
 internal expect fun formatAmount(cents: Long, currency: String, fractionDigits: Int): String
+
+/** [code] as an ISO 4217 currency code in capitals, or null when there is no such currency. */
+internal expect fun isoCurrency(code: String): String?

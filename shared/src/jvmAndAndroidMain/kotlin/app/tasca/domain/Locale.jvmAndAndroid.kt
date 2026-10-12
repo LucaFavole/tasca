@@ -18,6 +18,8 @@ internal actual fun formatAmount(cents: Long, currency: String, fractionDigits: 
         maximumFractionDigits = fractionDigits
     }.format(BigDecimal.valueOf(cents, 2))
 
+internal actual fun isoCurrency(code: String): String? = runCatching { Currency.getInstance(code.uppercase()).currencyCode }.getOrNull()
+
 internal actual fun monthName(month: Month): String = month.toJavaMonth().getDisplayName(TextStyle.FULL, Locale.getDefault())
 
 private val SHORT = DateTimeFormatter.ofPattern("d MMM")

@@ -10,6 +10,7 @@ import platform.Foundation.NSNumberFormatter
 import platform.Foundation.NSNumberFormatterCurrencyStyle
 import platform.Foundation.NSNumberFormatterRoundHalfEven
 import platform.Foundation.NSTimeZone
+import platform.Foundation.ISOCurrencyCodes
 import platform.Foundation.currentLocale
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.timeZoneForSecondsFromGMT
@@ -27,6 +28,8 @@ internal actual fun formatAmount(cents: Long, currency: String, fractionDigits: 
     val amount = NSDecimalNumber(mantissa = magnitude, exponent = -2, isNegative = cents < 0)
     return formatter.stringFromNumber(amount) ?: error("Cannot format $cents $currency")
 }
+
+internal actual fun isoCurrency(code: String): String? = code.uppercase().takeIf { it in NSLocale.ISOCurrencyCodes }
 
 internal actual fun monthName(month: Month): String =
     NSDateFormatter().apply { locale = NSLocale.currentLocale }.monthSymbols[month.ordinal] as String
