@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Tasca"
-include(":app")
+include(":app", ":shared")

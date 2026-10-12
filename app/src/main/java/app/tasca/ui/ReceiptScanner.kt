@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import app.tasca.domain.ReceiptLine
 import app.tasca.domain.ReceiptParser
 import app.tasca.domain.ReceiptScan
+import app.tasca.domain.today
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
@@ -21,7 +22,6 @@ import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import java.time.LocalDate
 import kotlin.math.abs
 
 /**
@@ -58,7 +58,7 @@ private fun read(context: Context, uri: Uri, onResult: (ReceiptScan?) -> Unit) {
     val image = runCatching { InputImage.fromFilePath(context, uri) }.getOrElse { onResult(null); return }
     val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     recognizer.process(image)
-        .addOnSuccessListener { text -> onResult(ReceiptParser.parse(rows(text), LocalDate.now())) }
+        .addOnSuccessListener { text -> onResult(ReceiptParser.parse(rows(text), today())) }
         .addOnFailureListener { onResult(null) }
         .addOnCompleteListener { recognizer.close() }
 }

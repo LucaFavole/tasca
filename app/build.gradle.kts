@@ -35,6 +35,8 @@ android {
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
+    implementation(project(":shared"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
@@ -54,7 +56,4 @@ dependencies {
 
     implementation("androidx.room:room-runtime:2.8.5")
     ksp("androidx.room:room-compiler:2.8.5")
-
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
 }

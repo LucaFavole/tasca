@@ -77,12 +77,17 @@ import app.tasca.domain.Frequency
 import app.tasca.domain.Money
 import app.tasca.domain.ReceiptScan
 import app.tasca.domain.Spoken
+import app.tasca.domain.today
 import app.tasca.ui.rememberReceiptScanner
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.kindColor
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
+import kotlinx.datetime.toJavaLocalDate
+import kotlinx.datetime.toKotlinLocalDate
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 
 /** Shared draft for a transaction or a recurring payment; both screens edit the same fields. */
@@ -92,7 +97,7 @@ class TxnDraft(kind: TxnKind) {
     var accountId by mutableStateOf<Long?>(null)
     var toAccountId by mutableStateOf<Long?>(null)
     var categoryId by mutableStateOf<Long?>(null)
-    var date by mutableStateOf(LocalDate.now())
+    var date by mutableStateOf(today())
     var note by mutableStateOf("")
 
     val amount: Long? get() = Calc.evaluate(expr)
@@ -148,14 +153,14 @@ class TxnDraft(kind: TxnKind) {
 
     companion object {
         val Saver = listSaver<TxnDraft, Any?>(
-            save = { listOf(it.kind.name, it.expr, it.accountId, it.toAccountId, it.categoryId, it.date.toEpochDay(), it.note) },
+            save = { listOf(it.kind.name, it.expr, it.accountId, it.toAccountId, it.categoryId, it.date.toEpochDays(), it.note) },
             restore = {
                 TxnDraft(TxnKind.valueOf(it[0] as String)).apply {
                     expr = it[1] as String
                     accountId = it[2] as Long?
                     toAccountId = it[3] as Long?
                     categoryId = it[4] as Long?
-                    date = LocalDate.ofEpochDay(it[5] as Long)
+                    date = LocalDate.fromEpochDays(it[5] as Long)
                     note = it[6] as String
                 }
             },
@@ -339,11 +344,12 @@ fun DraftFields(vm: AppViewModel, draft: TxnDraft, showDate: Boolean = true) {
 
     if (showDate) {
         Label("Date")
-        val today = LocalDate.now()
+        val today = today()
+        val yesterday = today.minus(1, DateTimeUnit.DAY)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             FilterChip(draft.date == today, { draft.date = today }, label = { Text("Today") })
-            FilterChip(draft.date == today.minusDays(1), { draft.date = today.minusDays(1) }, label = { Text("Yesterday") })
-            val custom = draft.date != today && draft.date != today.minusDays(1)
+            FilterChip(draft.date == yesterday, { draft.date = yesterday }, label = { Text("Yesterday") })
+            val custom = draft.date != today && draft.date != yesterday
             AssistChip(
                 onClick = { picking = true },
                 label = { Text(if (custom) relativeDay(draft.date) else "Pick…") },
@@ -360,12 +366,12 @@ fun DraftFields(vm: AppViewModel, draft: TxnDraft, showDate: Boolean = true) {
     )
 
     if (picking) {
-        val state = rememberDatePickerState(draft.date.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
+        val state = rememberDatePickerState(draft.date.toJavaLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { draft.date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
+                    state.selectedDateMillis?.let { draft.date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toKotlinLocalDate() }
                     picking = false
                 }) { Text("OK") }
             },

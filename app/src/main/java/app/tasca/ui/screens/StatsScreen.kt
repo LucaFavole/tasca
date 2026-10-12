@@ -52,11 +52,16 @@ import app.tasca.domain.Insights
 import app.tasca.domain.Money
 import app.tasca.domain.StatsRange
 import app.tasca.domain.oneDecimal
+import app.tasca.domain.today
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.SectionCard
 import app.tasca.ui.theme.LocalMoneyColors
-import java.time.YearMonth
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.YearMonth
+import kotlinx.datetime.minus
+import kotlinx.datetime.toJavaYearMonth
+import kotlinx.datetime.yearMonth
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
@@ -154,7 +159,7 @@ private fun Overview(ins: Insights, range: StatsRange) {
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Figure("Saving rate", ins.savingsRate?.let { "$it%" } ?: "–", MaterialTheme.colorScheme.primary)
-            if (ins.runwayMonths != null) Figure("Cash lasts", "${oneDecimal(ins.runwayMonths)} months", MaterialTheme.colorScheme.primary)
+            ins.runwayMonths?.let { Figure("Cash lasts", "${oneDecimal(it)} months", MaterialTheme.colorScheme.primary) }
         }
         if (ins.runwayMonths != null) Text(
             "How long your money outside investments covers your usual spending.",
@@ -247,8 +252,10 @@ private fun Weights(ins: Insights) {
                     Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)) {
                         Box(Modifier.fillMaxWidth(w.monthlyCents / top).height(6.dp).clip(CircleShape).background(Color(w.color)))
                     }
-                    if (w.shareOfIncome != null && w.daysOfIncome != null) Text(
-                        "${(w.shareOfIncome * 100).roundToInt()}% of income · ${days(w.daysOfIncome)}",
+                    val share = w.shareOfIncome
+                    val daysOfIncome = w.daysOfIncome
+                    if (share != null && daysOfIncome != null) Text(
+                        "${(share * 100).roundToInt()}% of income · ${days(daysOfIncome)}",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp),
                     )
@@ -257,6 +264,8 @@ private fun Weights(ins: Insights) {
         }
     }
 }
+
+private fun YearMonth.format(formatter: DateTimeFormatter): String = toJavaYearMonth().format(formatter)
 
 private val MONTH = DateTimeFormatter.ofPattern("MMM")
 private val MONTH_YEAR = DateTimeFormatter.ofPattern("MMM yyyy")
@@ -268,8 +277,8 @@ private fun longRange(r: StatsRange): String =
 
 @Composable
 private fun RangePicker(initial: StatsRange, onDismiss: () -> Unit, onPick: (StatsRange) -> Unit) {
-    val now = YearMonth.now()
-    val choices = (0L..35L).map { now.minusMonths(it) }
+    val now = today().yearMonth
+    val choices = (0L..35L).map { now.minus(it, DateTimeUnit.MONTH) }
     var from by remember { mutableStateOf(initial.from) }
     var to by remember { mutableStateOf(initial.to) }
     AlertDialog(
@@ -277,8 +286,8 @@ private fun RangePicker(initial: StatsRange, onDismiss: () -> Unit, onPick: (Sta
         title = { Text("Months to analyse") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MonthDropdown("From", from, choices) { from = it; if (to.isBefore(it)) to = it }
-                MonthDropdown("To", to, choices.filter { !it.isBefore(from) }) { to = it }
+                MonthDropdown("From", from, choices) { from = it; if (to < it) to = it }
+                MonthDropdown("To", to, choices.filter { it >= from }) { to = it }
                 Text(
                     "Averages use only the finished months in this range.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

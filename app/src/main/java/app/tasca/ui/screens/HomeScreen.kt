@@ -53,6 +53,7 @@ import app.tasca.data.TxnKind
 import app.tasca.domain.Money
 import app.tasca.domain.Period
 import app.tasca.domain.PeriodKind
+import app.tasca.domain.today
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.HomeView
 import app.tasca.ui.components.Donut
@@ -61,7 +62,11 @@ import app.tasca.ui.components.LegendRow
 import app.tasca.ui.components.Slice
 import app.tasca.ui.components.TxnItem
 import app.tasca.ui.components.kindColor
-import java.time.LocalDate
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
+import kotlinx.datetime.toJavaLocalDate
 import java.time.format.DateTimeFormatter
 
 /**
@@ -238,11 +243,11 @@ fun PeriodBar(period: Period, onChange: (Period) -> Unit) {
 private val DAY = DateTimeFormatter.ofPattern("EEE d MMM")
 
 fun relativeDay(d: LocalDate): String {
-    val today = LocalDate.now()
+    val today = today()
     return when (d) {
         today -> "Today"
-        today.plusDays(1) -> "Tomorrow"
-        today.minusDays(1) -> "Yesterday"
-        else -> d.format(DAY)
+        today.plus(1, DateTimeUnit.DAY) -> "Tomorrow"
+        today.minus(1, DateTimeUnit.DAY) -> "Yesterday"
+        else -> d.toJavaLocalDate().format(DAY)
     }
 }

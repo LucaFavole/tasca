@@ -77,7 +77,6 @@ import app.tasca.ui.screens.SettingsScreen
 import app.tasca.ui.screens.StatsScreen
 import app.tasca.ui.screens.StocksScreen
 import app.tasca.ui.theme.TascaTheme
-import java.util.Currency
 
 class TascaApp : Application() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -85,7 +84,7 @@ class TascaApp : Application() {
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
-        Money.currency = Currency.getInstance(getSharedPreferences("settings", Context.MODE_PRIVATE).getString("currency", "EUR")!!)
+        Money.currency = getSharedPreferences("settings", Context.MODE_PRIVATE).getString("currency", "EUR")!!
         WorkManager.getInstance(this).cancelUniqueWork("recurring")
         Daily.schedule(this)
         scope.launch {

@@ -24,7 +24,8 @@ import app.tasca.io.ParsedWorkbook
 import app.tasca.io.RecurringSheetRow
 import app.tasca.io.SheetRow
 import app.tasca.io.Yahoo
-import java.time.LocalDate
+import app.tasca.domain.today
+import kotlinx.datetime.LocalDate
 import kotlinx.coroutines.flow.first
 
 @Database(
@@ -71,11 +72,11 @@ class Ledger(private val db: AppDb) {
     }
 
     /** Posts every due occurrence of every active recurring payment. Safe to call any number of times. */
-    suspend fun postDueRecurring(today: LocalDate = LocalDate.now()): Int = db.withTransaction {
+    suspend fun postDueRecurring(today: LocalDate = today()): Int = db.withTransaction {
         var count = 0
         for (r in dao.activeRecurring()) {
             var cur = r
-            while (!cur.finished && !cur.nextDate.isAfter(today)) {
+            while (!cur.finished && cur.nextDate <= today) {
                 dao.upsertTxn(cur.toTxn())
                 cur = cur.copy(posted = cur.posted + 1)
                 count++
@@ -86,7 +87,7 @@ class Ledger(private val db: AppDb) {
     }
 
     /** What will be left this month in the main account, the oldest one not deleted; null when there is none. */
-    suspend fun monthLeft(today: LocalDate = LocalDate.now()): Pair<String, MonthLeft>? {
+    suspend fun monthLeft(today: LocalDate = today()): Pair<String, MonthLeft>? {
         val main = dao.balances().first().firstOrNull { !it.deleted } ?: return null
         return main.name to MonthLeft.of(today, main.id, main.balanceCents, dao.activeRecurring())
     }

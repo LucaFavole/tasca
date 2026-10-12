@@ -5,7 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
 
 private const val ACCOUNT_FILTER = "(:accountId IS NULL OR t.accountId = :accountId)"
 

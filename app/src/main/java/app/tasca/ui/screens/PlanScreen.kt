@@ -61,6 +61,8 @@ import app.tasca.data.Recurring
 import app.tasca.data.TxnKind
 import app.tasca.domain.Frequency
 import app.tasca.domain.Money
+import app.tasca.domain.alreadyPosted
+import app.tasca.domain.today
 import app.tasca.io.LedgerSheets
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.components.EmptyHint
@@ -68,8 +70,12 @@ import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.SectionCard
 import app.tasca.ui.components.kindColor
 import app.tasca.ui.theme.LocalMoneyColors
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
+import kotlinx.datetime.toJavaLocalDate
+import kotlinx.datetime.toKotlinLocalDate
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -265,7 +271,7 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
                 }
                 Switch(active, { active = it })
             }
-            if (draft.date.isBefore(LocalDate.now()) && original == null) {
+            if (draft.date < today() && original == null) {
                 Text(
                     "The start date is in the past: occurrences up to today are added right away.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
@@ -291,14 +297,14 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
     }
 
     if (pickStart || pickEnd) {
-        val initial = if (pickStart) draft.date else endDate ?: draft.date.plusYears(1)
-        val state = rememberDatePickerState(initial.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
+        val initial = if (pickStart) draft.date else endDate ?: draft.date.plus(1, DateTimeUnit.YEAR)
+        val state = rememberDatePickerState(initial.toJavaLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { pickStart = false; pickEnd = false },
             confirmButton = {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let {
-                        val d = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        val d = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toKotlinLocalDate()
                         if (pickStart) draft.date = d else endDate = d
                     }
                     pickStart = false; pickEnd = false
@@ -315,18 +321,4 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
     }
-}
-
-/**
- * After a schedule edit, new occurrences before the old next due date count as already posted,
- * so moving rent from the 1st to the 5th never records the current month twice.
- * Resuming a paused payment also skips the occurrences missed while it was paused.
- */
-fun alreadyPosted(original: Recurring?, updated: Recurring, today: LocalDate = LocalDate.now()): Int {
-    if (original == null) return 0
-    fun date(n: Int) = updated.frequency.occurrence(updated.startDate, updated.every, n)
-    var n = 0
-    if (original.posted > 0) while (date(n).isBefore(original.nextDate)) n++
-    if (!original.active && updated.active) while (date(n).isBefore(today)) n++
-    return n
 }

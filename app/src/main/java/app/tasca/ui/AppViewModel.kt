@@ -22,6 +22,7 @@ import app.tasca.domain.SpokenParser
 import app.tasca.domain.TradeSide
 import app.tasca.domain.Period
 import app.tasca.domain.PeriodKind
+import app.tasca.domain.today
 import app.tasca.io.LedgerSheets
 import app.tasca.io.SymbolHit
 import app.tasca.io.Yahoo
@@ -39,8 +40,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.LocalDate
-import java.time.YearMonth
+import kotlinx.datetime.yearMonth
 import java.util.Currency
 
 enum class HomeView { CATEGORIES, TRANSACTIONS }
@@ -109,14 +109,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** How many complete months the Stats averages look back over. */
     val statsRange = MutableStateFlow(StatsRange.last(6))
     val statsTotals = combine(selectedAccount, statsRange, ::Pair)
-        .flatMapLatest { (acc, r) -> dao.monthTotals(r.from.atDay(1), r.to.atEndOfMonth(), acc) }
+        .flatMapLatest { (acc, r) -> dao.monthTotals(r.from.firstDay, r.to.lastDay, acc) }
         .state(emptyList())
 
     val insights = combine(selectedAccount, statsRange, ::Pair)
         .flatMapLatest { (acc, r) ->
-            val now = YearMonth.now()
-            val from = minOf(r.from, now).atDay(1)
-            val to = maxOf(r.to, now).atEndOfMonth()
+            val now = today().yearMonth
+            val from = minOf(r.from, now).firstDay
+            val to = maxOf(r.to, now).lastDay
             combine(
                 dao.monthTotals(from, to, acc),
                 dao.categoryMonths(from, to, acc),
@@ -125,7 +125,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             ) { months, cats, balances, holdings ->
                 val liquid = if (acc == null) balances.sumOf { it.balanceCents } - holdings.sumOf { it.investedCents } else null
                 InsightsCalc.compute(
-                    LocalDate.now(), r.completeMonths(now),
+                    today(), r.completeMonths(now),
                     months.filter { it.kind == TxnKind.INCOME }.associate { it.month to it.totalCents },
                     months.filter { it.kind == TxnKind.EXPENSE }.associate { it.month to it.totalCents },
                     cats, liquid,
@@ -164,7 +164,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun trade(holdingId: Long, side: TradeSide, shares: Double, unitPrice: Double, feeCents: Long, taxCents: Long = 0) =
         io {
-            ledger.trade(holdingId, side, shares, unitPrice, feeCents, taxCents, LocalDate.now())
+            ledger.trade(holdingId, side, shares, unitPrice, feeCents, taxCents, today())
             say(if (side == TradeSide.BUY) "Purchase recorded" else "Sale recorded")
         }
 
@@ -176,7 +176,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
-        Money.currency = Currency.getInstance(_currency.value)
+        Money.currency = _currency.value
         viewModelScope.launch {
             ledger.ensureSeeded()
             ledger.postDueRecurring()
@@ -191,7 +191,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setCurrency(code: String) {
         val c = runCatching { Currency.getInstance(code.uppercase()) }.getOrNull() ?: return say("Unknown currency $code")
         prefs.edit().putString("currency", c.currencyCode).apply()
-        Money.currency = c
+        Money.currency = c.currencyCode
         _currency.value = c.currencyCode
     }
 
@@ -205,7 +205,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var spoken: Spoken? = null
 
     suspend fun prepareSpoken(text: String) {
-        spoken = withContext(Dispatchers.IO) { SpokenParser.parse(text, dao.categories(), LocalDate.now()) }
+        spoken = withContext(Dispatchers.IO) { SpokenParser.parse(text, dao.categories(), today()) }
     }
 
     suspend fun txn(id: Long): Txn? = withContext(Dispatchers.IO) { dao.txn(id) }
@@ -249,7 +249,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun importExcel(uri: Uri) = io {
         val resolver = getApplication<Application>().contentResolver
-        val sheets = resolver.openInputStream(uri)!!.use { Xlsx.read(it) }
+        val sheets = Xlsx.read(resolver.openInputStream(uri)!!.use { it.readBytes() })
         val parsed = LedgerSheets.read(sheets)
         val r = ledger.import(parsed)
         if (r.fresh) applySettings(parsed.config.settings)
@@ -268,7 +268,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "reminder" to Reminder.isOn(getApplication()).toString(),
         )
         val book = ledger.exportBook(_currency.value, settings)
-        getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { Xlsx.write(book, it) }
+        getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Xlsx.write(book)) }
         say("Exported ${book.take(3).sumOf { it.rows.size - 2 }} transactions, with accounts, regular payments, budgets and settings")
     }
 
@@ -280,7 +280,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settings["reminder"]?.toBooleanStrictOrNull()?.let { Reminder.setOn(getApplication(), it) }
     }
 
-    fun exportFileName(): String = "tasca_${LocalDate.now()}.xlsx"
+    fun exportFileName(): String = "tasca_${today()}.xlsx"
 }
 
 /** What deleting a category touches: [txns] must move elsewhere, [recurring] payments are deleted with it. */
