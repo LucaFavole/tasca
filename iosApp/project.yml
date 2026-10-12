@@ -1,0 +1,59 @@
+# Generate iosApp.xcodeproj with `xcodegen` from this folder. See docs/ios-verify.md.
+name: iosApp
+options:
+  bundleIdPrefix: app.tasca
+  developmentLanguage: en
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    # Your Team ID from Xcode > Settings > Accounts. Set it here, not in Xcode,
+    # because running xcodegen again overwrites changes made in Xcode.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: NO
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+      - path: Common
+    dependencies:
+      - target: TascaWidgets
+    preBuildScripts:
+      - name: Compile Kotlin Framework
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "YES" = "$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED" ]; then
+            echo "Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \"YES\""
+            exit 0
+          fi
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode
+    settings:
+      base:
+        PRODUCT_NAME: Tasca
+        PRODUCT_BUNDLE_IDENTIFIER: app.tasca
+        INFOPLIST_FILE: iosApp/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iosApp/iosApp.entitlements
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        OTHER_LDFLAGS: $(inherited) -framework Shared
+  TascaWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TascaWidgets
+      - path: Common
+    settings:
+      base:
+        PRODUCT_NAME: TascaWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: app.tasca.widgets
+        INFOPLIST_FILE: TascaWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: TascaWidgets/TascaWidgets.entitlements
+        SKIP_INSTALL: YES
