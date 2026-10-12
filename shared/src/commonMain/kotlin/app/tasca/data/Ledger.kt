@@ -12,7 +12,7 @@ import androidx.room.immediateTransaction
 import androidx.room.migration.AutoMigrationSpec
 import androidx.room.useWriterConnection
 import androidx.sqlite.SQLiteConnection
-import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.SQLiteDriver
 import androidx.sqlite.execSQL
 import app.tasca.domain.MonthLeft
 import app.tasca.domain.Trade
@@ -344,6 +344,9 @@ class Ledger(private val db: AppDb) {
     companion object {
         /** The ledger in [builder]'s database, opened the same way on every platform. */
         fun open(builder: RoomDatabase.Builder<AppDb>): Ledger =
-            Ledger(builder.setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build())
+            Ledger(builder.setDriver(sqliteDriver()).setQueryCoroutineContext(Dispatchers.IO).build())
     }
 }
+
+/** Android keeps the phone's own SQLite, which wrote the existing databases; iOS and tests bundle one. */
+internal expect fun sqliteDriver(): SQLiteDriver

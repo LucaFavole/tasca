@@ -37,8 +37,16 @@ kotlin {
         commonMain.dependencies {
             api("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
             api("androidx.room:room-runtime:2.8.5")
-            implementation("androidx.sqlite:sqlite-bundled:2.6.2")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+        }
+        androidMain.dependencies {
+            implementation("androidx.sqlite:sqlite-framework:2.6.2")
+        }
+        iosMain.dependencies {
+            implementation("androidx.sqlite:sqlite-bundled:2.6.2")
+        }
+        jvmMain.dependencies {
+            implementation("androidx.sqlite:sqlite-bundled:2.6.2")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
