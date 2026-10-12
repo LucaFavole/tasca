@@ -27,6 +27,7 @@ import platform.darwin.NSObject
 import platform.darwin.dispatch_semaphore_create
 import platform.darwin.dispatch_semaphore_signal
 import platform.darwin.dispatch_semaphore_wait
+import platform.posix.memcpy
 import platform.zlib.MAX_WBITS
 import platform.zlib.ZLIB_VERSION
 import platform.zlib.Z_FINISH
@@ -88,8 +89,12 @@ private fun inflateRaw(input: ByteArray, size: Int): ByteArray {
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
-private fun ByteArray.toNSData(): NSData =
+internal fun ByteArray.toNSData(): NSData =
     if (isEmpty()) NSData() else usePinned { NSData.create(bytes = it.addressOf(0), length = size.convert()) }
+
+@OptIn(ExperimentalForeignApi::class)
+internal fun NSData.toByteArray(): ByteArray =
+    ByteArray(length.toInt()).also { out -> if (out.isNotEmpty()) out.usePinned { memcpy(it.addressOf(0), bytes, length) } }
 
 @OptIn(BetaInteropApi::class)
 internal actual fun httpGet(url: String): String {

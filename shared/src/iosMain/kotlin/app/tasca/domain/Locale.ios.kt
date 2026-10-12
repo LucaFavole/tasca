@@ -29,6 +29,7 @@ internal actual fun formatAmount(cents: Long, currency: String, fractionDigits: 
     return formatter.stringFromNumber(amount) ?: error("Cannot format $cents $currency")
 }
 
+// To verify on a Mac: Settings accepts "usd" as USD and refuses "XYZ", as on Android.
 internal actual fun isoCurrency(code: String): String? = code.uppercase().takeIf { it in NSLocale.ISOCurrencyCodes }
 
 internal actual fun monthName(month: Month): String =
