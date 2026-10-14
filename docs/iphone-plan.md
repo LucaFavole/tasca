@@ -1,6 +1,6 @@
 # Tasca for iPhone: a plan
 
-Status: phases 1 to 4 are done on Windows, in October 2026. The logic, the Excel code and the database live in the `shared` module and compile for iOS (`:shared:compileKotlinIosArm64`). Nothing has run on iOS yet. Still open from phase 4: settings stay in SharedPreferences in `:app`, not DataStore. Android keeps the system SQLite through `AndroidSQLiteDriver`; iOS and the JVM tests use the bundled driver. The next steps need a Mac: phase 0, then running `:shared:iosSimulatorArm64Test`, then phase 5 onward.
+Status: phases 1 to 5 are done on Windows, in October 2026. The logic, the Excel code, the database, the settings and the screens live in the `shared` module, and the Android app runs the shared UI. Settings moved to DataStore, which takes over the old SharedPreferences file on first use. Android keeps the system SQLite through `AndroidSQLiteDriver`; iOS and the JVM tests use the bundled driver. The iOS Kotlin code in `shared/src/iosMain` and the Swift app in `iosApp/` are written but unverified. Windows compiles the iOS Kotlin, but it cannot link the framework and has no Xcode, so nothing has run on iOS yet. The next steps need a Mac: phase 0, then `:shared:iosSimulatorArm64Test`, then the checklists in `docs/ios-verify.md` for the Swift side and `docs/ios-verify-kotlin.md` for the Kotlin side.
 
 This document records what an iPhone version needs, so the work can continue later without redoing the research.
 
@@ -203,14 +203,15 @@ The upfront cost looks close to approach A. The difference comes later. Every ne
 
 WidgetKit widgets are SwiftUI views in a separate extension target. A widget does not run code all the time. It returns a timeline of entries, and the system renders them. A widget that people look at often gets about 40 to 70 refreshes a day. Reloads requested while the app is in the foreground, and reloads caused by an App Intent from a widget button, do not count against that budget.
 
-Left this month. Port `LeftWidget.kt` like this:
+Account balance. The Android widget in `LeftWidget.kt` shows one name and one amount: an account's balance, the Total or the Net worth, picked when the widget is placed. Port it like this:
 
-1. In the app, after every ledger change, compute `Ledger.monthLeft()` for today and for the first day of next month. Android already refreshes the widget on every change in `TascaApp.onCreate`, through `dao.ledgerChanges()` with a 500 ms debounce. Keep that.
-2. Write the account name and the two results, already formatted by `Money.format`, to a small JSON file in the App Group container. Get the folder with `containerURL(forSecurityApplicationGroupIdentifier:)`.
-3. Call `WidgetCenter.shared.reloadTimelines(ofKind:)`.
-4. The widget's timeline has two entries, today and the 1st of next month. Use green or red as Android does.
+1. In the app, after every ledger change, write `widget.json` to the App Group container. Get the folder with `containerURL(forSecurityApplicationGroupIdentifier:)`. The file lists every account with its balance, the Total, the Net worth and the default expense account, already formatted by `Money.format`. Android already refreshes the widget on every change in `TascaApp.onCreate`, through `dao.ledgerChanges()` with a 500 ms debounce. Keep that.
+2. Call `WidgetCenter.shared.reloadAllTimelines()`.
+3. Make the widget an `AppIntentConfiguration`. Its configuration intent offers Total, Net worth and the accounts from `widget.json`, as Android's picker does. Without a pick, show the default expense account. Use green or red as Android does.
 
-This works without background code because of how `MonthLeft.of` counts. It adds every unposted occurrence up to the end of the month, including ones already due. When a payment is posted later, the balance and the amount still due change by the same value, so the result stays the same. New transactions refresh the snapshot anyway. Apart from them, the number only changes when the month changes, and the second timeline entry covers that.
+The balance only changes when the ledger changes, so the widget needs no background code and its timeline needs one entry.
+
+Recent activity. The Android widget in `RecentWidget.kt` scrolls through the latest 30 transactions, and a row opens that transaction. WidgetKit cannot scroll, so the iOS widget shows a fixed list of the 6 latest from `widget.json`, with the same texts. Each row is a `Link` to `tasca://txn/<id>`, which the app follows like a row tap on Android.
 
 Quick add. Interactive widget buttons, available since iOS 17, run an App Intent in the background without opening the app. They are the wrong tool for + and the microphone, because both need the app on screen. Apple's documentation says to use `Link` and `widgetURL` to open the app. A small widget can hold more than one `Link`. Use two links, `tasca://add` and `tasca://voice`, and handle them in the app with `onOpenURL`. That is the same as `QuickAdd.KEYPAD` and `QuickAdd.VOICE` on Android.
 
@@ -267,7 +268,7 @@ Syncing between devices through CloudKit would need the iCloud capability, which
 
 ### Settings
 
-`AppViewModel` keeps theme, currency, tax rate and the reminder flag in `SharedPreferences`. Move them to DataStore Preferences in the shared module. On iOS the file goes in the app's Documents or Application Support folder. The widget does not need any setting, because the snapshot carries formatted text.
+`AppViewModel` keeps theme, currency, tax rate and the reminder flag in `SharedPreferences`. Move them to DataStore Preferences in the shared module. On iOS the file goes in the app's Documents or Application Support folder. The widget reads no setting: the snapshot carries formatted text and the default account, and the iOS widget keeps its own pick.
 
 ## Phases
 
@@ -341,9 +342,9 @@ Estimate: 1 to 2 days.
 
 ### Phase 8. Widgets and the control
 
-Add the widget extension with the left-this-month widget and the quick add widget. Add the App Group and the snapshot file. Add the control with an `OpenIntent`.
+Add the widget extension with the balance widget, the recent activity widget and the quick add widget. Add the App Group and the snapshot file. Add the control with an `OpenIntent`.
 
-Done when: the left widget shows the same amount as the Android widget for the same data. It updates within seconds of saving a transaction. The + link opens the keypad.
+Done when: the balance widget shows the same name and amount as the Android widget for the same pick and data. It updates within seconds of saving a transaction. The + link opens the keypad.
 
 Estimate: 3 to 5 days.
 
