@@ -29,6 +29,7 @@ class DailyWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     override suspend fun doWork(): Result = try {
         Ledger.get(applicationContext).postDueRecurring()
         LeftWidget.refresh(applicationContext)
+        RecentWidget.refresh(applicationContext)
         if (Reminder.isOn(applicationContext)) Reminder.show(applicationContext)
         Result.success()
     } catch (e: Exception) {

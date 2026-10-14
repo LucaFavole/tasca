@@ -89,7 +89,10 @@ class TascaApp : Application() {
         WorkManager.getInstance(this).cancelUniqueWork("recurring")
         Daily.schedule(this)
         scope.launch {
-            Ledger.get(this@TascaApp).dao.ledgerChanges().debounce(500).collect { runCatching { LeftWidget.refresh(this@TascaApp) } }
+            Ledger.get(this@TascaApp).dao.ledgerChanges().debounce(500).collect {
+                runCatching { LeftWidget.refresh(this@TascaApp) }
+                runCatching { RecentWidget.refresh(this@TascaApp) }
+            }
         }
     }
 }
@@ -103,13 +106,13 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
-    /** Set when the widget or the reminder asks for the keypad; the UI opens it and clears the flag. */
-    private val addRequested = mutableStateOf(false)
+    /** A screen a widget or the reminder asked for, such as the keypad; the UI opens it and clears the request. */
+    private val openRoute = mutableStateOf<String?>(null)
     private val listen = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val heard = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: return@registerForActivityResult
         lifecycleScope.launch {
             vm.prepareSpoken(heard)
-            addRequested.value = true
+            openRoute.value = "txn"
         }
     }
 
@@ -119,7 +122,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handle(intent)
         setContent {
             val theme by vm.theme.collectAsStateWithLifecycle()
-            TascaTheme(theme) { AppRoot(vm, addRequested) }
+            TascaTheme(theme) { AppRoot(vm, openRoute) }
         }
     }
 
@@ -129,11 +132,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent) {
+        intent.getLongExtra(EXTRA_TXN, -1).takeIf { it > 0 }?.let { openRoute.value = "txn?id=$it"; return }
         val mode = QuickAdd.of(intent) ?: return
         NotificationManagerCompat.from(this).cancel(Reminder.ID)
         when (mode) {
             QuickAdd.OPEN -> Unit
-            QuickAdd.KEYPAD -> addRequested.value = true
+            QuickAdd.KEYPAD -> openRoute.value = "txn"
             QuickAdd.VOICE -> try {
                 listen.launch(
                     Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -142,17 +146,22 @@ class MainActivity : ComponentActivity() {
                         .putExtra(RecognizerIntent.EXTRA_PROMPT, "Es. \"15 euro pranzo\""),
                 )
             } catch (_: ActivityNotFoundException) {
-                addRequested.value = true
+                openRoute.value = "txn"
             }
         }
+    }
+
+    companion object {
+        /** Id of a transaction to open, sent by the recent activity widget. */
+        const val EXTRA_TXN = "txn"
     }
 }
 
 @Composable
-private fun AppRoot(vm: AppViewModel, addRequested: MutableState<Boolean>) {
+private fun AppRoot(vm: AppViewModel, openRoute: MutableState<String?>) {
     val nav = rememberNavController()
-    LaunchedEffect(addRequested.value) {
-        if (addRequested.value) { addRequested.value = false; nav.navigate("txn") }
+    LaunchedEffect(openRoute.value) {
+        openRoute.value?.let { openRoute.value = null; nav.navigate(it) }
     }
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

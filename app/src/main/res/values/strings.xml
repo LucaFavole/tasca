@@ -1,4 +1,5 @@
 <resources>
     <string name="widget_description">Add an expense with one tap, or by voice</string>
     <string name="widget_left_description">The balance of an account you choose</string>
+    <string name="widget_recent_description">Your latest transactions; tap one to open it</string>
 </resources>
