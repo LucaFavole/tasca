@@ -1,5 +1,7 @@
 package app.tasca.ui.screens
 
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,7 +57,10 @@ import app.tasca.ui.theme.LocalMoneyColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccountsScreen(vm: AppViewModel, contentPadding: PaddingValues, onTransfer: () -> Unit, onTransactions: (Long) -> Unit, onInvestments: () -> Unit) {
+fun AccountsScreen(
+    vm: AppViewModel, contentPadding: PaddingValues, onTransfer: () -> Unit, onTransactions: (Long) -> Unit, onInvestments: () -> Unit,
+    onSettings: () -> Unit,
+) {
     val balances by vm.balances.collectAsStateWithLifecycle()
     val holdings by vm.holdings.collectAsStateWithLifecycle()
     val quotes by vm.quotes.collectAsStateWithLifecycle()
@@ -67,6 +72,7 @@ fun AccountsScreen(vm: AppViewModel, contentPadding: PaddingValues, onTransfer: 
     Column {
         TopAppBar(
             title = { Text("Accounts", fontWeight = FontWeight.Bold) },
+            actions = { IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Settings") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 16.dp)) {

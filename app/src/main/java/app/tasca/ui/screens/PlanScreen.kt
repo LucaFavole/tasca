@@ -1,5 +1,6 @@
 package app.tasca.ui.screens
 
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -80,7 +81,7 @@ import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlanScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditRecurring: (Long?) -> Unit) {
+fun PlanScreen(vm: AppViewModel, contentPadding: PaddingValues, onSettings: () -> Unit, onEditRecurring: (Long?) -> Unit) {
     val recurring by vm.recurring.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     val budgets by vm.budgets.collectAsStateWithLifecycle()
@@ -91,6 +92,7 @@ fun PlanScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditRecurring:
     Column {
         TopAppBar(
             title = { Text("Plan", fontWeight = FontWeight.Bold) },
+            actions = { IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Settings") } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
         )
         LazyColumn(

@@ -225,6 +225,7 @@ private fun AppRoot(vm: AppViewModel, openRoute: MutableState<String?>) {
                             nav.goTab(Tab.HOME.route)
                         },
                         onInvestments = { nav.navigate("stocks") },
+                        onSettings = { nav.navigate("settings") },
                     )
                 }
                 composable("stocks") {
@@ -234,9 +235,9 @@ private fun AppRoot(vm: AppViewModel, openRoute: MutableState<String?>) {
                     "holding?id={id}",
                     arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = -1L }),
                 ) { e -> EditHoldingScreen(vm, e.arguments!!.getLong("id").takeIf { it >= 0 }) { nav.popBackStack() } }
-                composable(Tab.STATS.route) { StatsScreen(vm, padding) }
+                composable(Tab.STATS.route) { StatsScreen(vm, padding) { nav.navigate("settings") } }
                 composable(Tab.PLAN.route) {
-                    PlanScreen(vm, padding) { id -> nav.navigate(if (id == null) "recurring" else "recurring?id=$id") }
+                    PlanScreen(vm, padding, onSettings = { nav.navigate("settings") }) { id -> nav.navigate(if (id == null) "recurring" else "recurring?id=$id") }
                 }
                 composable(
                     "txn?id={id}&kind={kind}",

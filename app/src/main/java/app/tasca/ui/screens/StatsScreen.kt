@@ -1,5 +1,7 @@
 package app.tasca.ui.screens
 
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -66,7 +68,7 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @Composable
-fun StatsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
+fun StatsScreen(vm: AppViewModel, contentPadding: PaddingValues, onSettings: () -> Unit) {
     val range by vm.statsRange.collectAsStateWithLifecycle()
     var picking by remember { mutableStateOf(false) }
     val totals by vm.statsTotals.collectAsStateWithLifecycle()
@@ -76,7 +78,7 @@ fun StatsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
     val ins = insights
 
     Column {
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { AccountPicker(balances, selected, showBalance = false) { vm.selectedAccount.value = it } }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(3 to "3M", 6 to "6M", 12 to "1Y").forEach { (n, label) ->
@@ -88,6 +90,7 @@ fun StatsScreen(vm: AppViewModel, contentPadding: PaddingValues) {
                     leadingIcon = { Icon(Icons.Outlined.DateRange, null, Modifier.size(16.dp)) },
                 )
             }
+            IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Settings") }
         }
         LazyColumn(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = contentPadding.calculateBottomPadding() + 24.dp),
