@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarDuration
@@ -105,6 +106,8 @@ private fun AppRoot(vm: AppViewModel, platform: Platform, openRoute: MutableStat
                         onClick = { nav.goTab(t.route) },
                         icon = { Icon(t.icon, null) },
                         label = { Text(t.label) },
+                        // Material3 1.4 tints the selected label with the secondary colour; earlier versions used onSurface.
+                        colors = NavigationBarItemDefaults.colors(selectedTextColor = MaterialTheme.colorScheme.onSurface),
                     )
                 }
             }
