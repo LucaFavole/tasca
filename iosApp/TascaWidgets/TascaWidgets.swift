@@ -5,6 +5,7 @@ import WidgetKit
 struct TascaWidgets: WidgetBundle {
     var body: some Widget {
         BalanceWidget()
+        RecentWidget()
         QuickAddWidget()
         AddExpenseControl()
     }
@@ -17,4 +18,14 @@ extension Color {
     static let tascaOrange = Color(red: 1, green: 138 / 255, blue: 101 / 255)
     static let tascaPurple = Color(red: 139 / 255, green: 124 / 255, blue: 1)
     static let tascaMuted = Color.white.opacity(0.7)
+}
+
+/// `widget.json`, which the Kotlin app writes to the App Group after every change. Its `updated` field is not read.
+enum WidgetFile {
+    static func decode<T: Decodable>(_ type: T.Type) -> T? {
+        guard let folder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.tasca"),
+              let data = try? Data(contentsOf: folder.appendingPathComponent("widget.json"))
+        else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
 }

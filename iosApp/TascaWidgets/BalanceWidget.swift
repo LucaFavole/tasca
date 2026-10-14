@@ -2,7 +2,7 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// What the Kotlin app writes to `widget.json` in the App Group after every change. Its `updated` field is not read.
+/// The balance widget's part of `widget.json`.
 struct BalanceSnapshot: Decodable {
     struct Amount: Decodable {
         let amount: String
@@ -28,12 +28,7 @@ struct BalanceSnapshot: Decodable {
         netWorth: Amount(amount: "1.234,56 €", amountCents: 123_456)
     )
 
-    static func load() -> BalanceSnapshot? {
-        guard let folder = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.tasca"),
-              let data = try? Data(contentsOf: folder.appendingPathComponent("widget.json"))
-        else { return nil }
-        return try? JSONDecoder().decode(BalanceSnapshot.self, from: data)
-    }
+    static func load() -> BalanceSnapshot? { WidgetFile.decode(BalanceSnapshot.self) }
 
     /// The name and amount for a picked figure. An account that is gone, or no pick, shows the default account, as on Android.
     func shown(_ figure: BalanceFigure?) -> Shown? {
