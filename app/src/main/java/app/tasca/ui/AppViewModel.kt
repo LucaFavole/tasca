@@ -1,12 +1,9 @@
 package app.tasca.ui
 
 import android.app.Application
-import android.content.Context
-import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import app.tasca.Reminder
 import app.tasca.data.Account
 import app.tasca.data.AccountBalance
 import app.tasca.data.Budget
@@ -42,6 +39,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.yearMonth
 import java.util.Currency
@@ -52,12 +50,18 @@ enum class HomeView { CATEGORIES, TRANSACTIONS }
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     val ledger = Ledger.get(app)
     private val dao = ledger.dao
-    private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val settings = Settings.get(app)
+    // Read before the first frame, so a chosen theme never starts as the system one.
+    private val stored = runBlocking { settings.current() }
 
-    private val _theme = MutableStateFlow(ThemeMode.valueOf(prefs.getString("theme", ThemeMode.SYSTEM.name)!!))
+    private val _theme = MutableStateFlow(stored.theme)
     val theme = _theme.asStateFlow()
-    private val _currency = MutableStateFlow(prefs.getString("currency", "EUR")!!)
+    private val _currency = MutableStateFlow(stored.currency)
     val currency = _currency.asStateFlow()
+    private val _reminder = MutableStateFlow(stored.reminder)
+    val reminder = _reminder.asStateFlow()
+    private val _defaultAccounts = MutableStateFlow(stored.defaultAccounts)
+    val defaultAccounts = _defaultAccounts.asStateFlow()
 
     val messages = MutableSharedFlow<Message>(extraBufferCapacity = 4)
 
@@ -88,15 +92,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      * The account a new transaction of [kind] starts on: the one chosen in Settings, else "Main" for expenses and
      * "Risparmi" for income when such accounts exist, else the first account.
      */
-    fun defaultAccount(kind: TxnKind): Long? = defaultAccount(prefs, balances.value, kind)
+    fun defaultAccount(kind: TxnKind): Long? = defaultAccount(_defaultAccounts.value, balances.value, kind)
 
     fun setDefaultAccount(kind: TxnKind, id: Long) {
-        prefs.edit().putLong(defaultAccountKey(kind), id).apply()
-        defaultsVersion.value++
+        save { it.copy(defaultAccounts = it.defaultAccounts.with(kind, id)) }
+        _defaultAccounts.value = _defaultAccounts.value.with(kind, id)
     }
-
-    /** Bumped when a default account changes, so Settings shows the new choice. */
-    val defaultsVersion = MutableStateFlow(0)
 
     /** Whether Home shows anything other than its default: all accounts, this month, categories. */
     val homeNarrowed = combine(
@@ -194,9 +195,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteHolding(id: Long) = io { dao.deleteHolding(id) }
 
     /** Capital gains tax rate used to prefill sales; 26% is the usual Italian rate on ETFs and stocks. */
-    var taxRatePct: Double
-        get() = prefs.getFloat("taxRate", 26f).toDouble()
-        set(v) = prefs.edit().putFloat("taxRate", v.toFloat()).apply()
+    var taxRatePct: Double = stored.taxRatePct
+        set(v) {
+            field = v.toFloat().toDouble()
+            save { it.copy(taxRatePct = v) }
+        }
 
     fun trade(holdingId: Long, side: TradeSide, shares: Double, unitPrice: Double, feeCents: Long, taxCents: Long = 0) =
         io {
@@ -220,15 +223,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setTheme(mode: ThemeMode) {
-        prefs.edit().putString("theme", mode.name).apply()
+        save { it.copy(theme = mode) }
         _theme.value = mode
     }
 
     fun setCurrency(code: String) {
         val c = runCatching { Currency.getInstance(code.uppercase()) }.getOrNull() ?: return say("Unknown currency $code")
-        prefs.edit().putString("currency", c.currencyCode).apply()
+        save { it.copy(currency = c.currencyCode) }
         Money.currency = c.currencyCode
         _currency.value = c.currencyCode
+    }
+
+    fun setReminder(on: Boolean) {
+        save { it.copy(reminder = on) }
+        _reminder.value = on
+    }
+
+    /** True only the first time: the launch prompt for notifications is shown once. */
+    suspend fun firstNotificationPrompt(): Boolean = !settings.update { it.copy(askedNotifications = true) }.askedNotifications
+
+    private fun save(change: (Prefs) -> Prefs) {
+        viewModelScope.launch { settings.update(change) }
     }
 
     private fun say(msg: String) { messages.tryEmit(Message(msg)) }
@@ -308,7 +323,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun exportExcel(uri: Uri) = io {
         val settings = mapOf(
             "currency" to _currency.value, "theme" to _theme.value.name, "taxRate" to taxRatePct.toString(),
-            "reminder" to Reminder.isOn(getApplication()).toString(),
+            "reminder" to _reminder.value.toString(),
         )
         val book = ledger.exportBook(_currency.value, settings)
         getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Xlsx.write(book)) }
@@ -320,7 +335,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         settings["currency"]?.let(::setCurrency)
         settings["theme"]?.let { t -> ThemeMode.entries.firstOrNull { it.name == t } }?.let(::setTheme)
         settings["taxRate"]?.toDoubleOrNull()?.takeIf { it in 0.0..100.0 }?.let { taxRatePct = it }
-        settings["reminder"]?.toBooleanStrictOrNull()?.let { Reminder.setOn(getApplication(), it) }
+        settings["reminder"]?.toBooleanStrictOrNull()?.let(::setReminder)
     }
 
     fun exportFileName(): String = "tasca_${today()}.xlsx"
@@ -329,15 +344,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 /** What deleting a category touches: [txns] must move elsewhere, [recurring] payments are deleted with it. */
 data class CategoryUsage(val txns: Int, val recurring: Int)
 
-private fun defaultAccountKey(kind: TxnKind) = if (kind == TxnKind.INCOME) "defaultIncomeAccount" else "defaultExpenseAccount"
-
 /** The default account of [kind] among [accounts]; the balance widget uses it too, so both agree. */
-fun defaultAccount(prefs: SharedPreferences, accounts: List<AccountBalance>, kind: TxnKind): Long? {
+fun defaultAccount(chosen: DefaultAccounts, accounts: List<AccountBalance>, kind: TxnKind): Long? {
     val active = accounts.filter { !it.deleted }
     fun named(name: String) = active.firstOrNull { it.name.equals(name, ignoreCase = true) }?.id
-    val chosen = prefs.getLong(defaultAccountKey(kind), -1).takeIf { id -> active.any { it.id == id } }
+    val picked = chosen.of(kind)?.takeIf { id -> active.any { it.id == id } }
     val expense = named("Main") ?: active.firstOrNull()?.id
-    return chosen ?: if (kind == TxnKind.INCOME) named("Risparmi") ?: expense else expense
+    return picked ?: if (kind == TxnKind.INCOME) named("Risparmi") ?: expense else expense
 }
 
 /** A snackbar line; [action] runs when its [actionLabel] is tapped. */

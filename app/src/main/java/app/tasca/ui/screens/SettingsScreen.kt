@@ -103,14 +103,14 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
     var editCurrency by remember { mutableStateOf(false) }
     var pickDefault by remember { mutableStateOf<TxnKind?>(null) }
     val balances by vm.balances.collectAsStateWithLifecycle()
-    val defaultsVersion by vm.defaultsVersion.collectAsStateWithLifecycle()
-    val defaultNames = remember(balances, defaultsVersion) {
+    val defaults by vm.defaultAccounts.collectAsStateWithLifecycle()
+    val defaultNames = remember(balances, defaults) {
         TxnKind.entries.associateWith { k -> balances.firstOrNull { it.id == vm.defaultAccount(k) }?.name ?: "None" }
     }
     val context = LocalContext.current
-    var reminder by remember { mutableStateOf(Reminder.isOn(context)) }
+    val reminder by vm.reminder.collectAsStateWithLifecycle()
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) { reminder = false; Reminder.setOn(context, false) }
+        if (!granted) vm.setReminder(false)
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importExcel) }
     val exporter = rememberLauncherForActivityResult(
@@ -160,8 +160,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
                         supportingContent = { Text("At 23:00, asks if you recorded the day's expenses") },
                         trailingContent = {
                             Switch(reminder, { on ->
-                                reminder = on
-                                Reminder.setOn(context, on)
+                                vm.setReminder(on)
                                 if (on && !Reminder.allowed(context)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                             })
                         },

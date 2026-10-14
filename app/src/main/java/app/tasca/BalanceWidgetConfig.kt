@@ -59,8 +59,8 @@ class BalanceWidgetConfig : ComponentActivity() {
                                     headlineContent = { Text(shown.first) },
                                     trailingContent = { Text(Money.format(shown.second)) },
                                     modifier = Modifier.clickable {
-                                        LeftWidget.setFigure(this@BalanceWidgetConfig, widgetId, figure)
                                         lifecycleScope.launch {
+                                            LeftWidget.setFigure(this@BalanceWidgetConfig, widgetId, figure)
                                             runCatching { LeftWidget.refresh(this@BalanceWidgetConfig) }
                                             setResult(RESULT_OK, done)
                                             finish()

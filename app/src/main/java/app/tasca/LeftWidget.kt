@@ -2,6 +2,7 @@ package app.tasca
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -12,7 +13,9 @@ import app.tasca.data.WidgetFigure
 import app.tasca.data.figureOf
 import app.tasca.data.get
 import app.tasca.domain.Money
+import app.tasca.ui.Settings
 import app.tasca.ui.defaultAccount
+import app.tasca.ui.get
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -23,15 +26,8 @@ import kotlinx.coroutines.launch
  * [BalanceWidgetConfig]. The class keeps its first name so widgets already placed keep working.
  */
 class LeftWidget : AppWidgetProvider() {
-    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                runCatching { update(context, manager, ids) }
-            } finally {
-                pending.finish()
-            }
-        }
+    override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = inBackground {
+        update(context, manager, ids)
     }
 
     /** An app update resets placed widgets to their empty layout, so redraw them as soon as it lands. */
@@ -41,16 +37,14 @@ class LeftWidget : AppWidgetProvider() {
         onUpdate(context, manager, manager.getAppWidgetIds(ComponentName(context, LeftWidget::class.java)))
     }
 
-    override fun onDeleted(context: Context, ids: IntArray) {
-        prefs(context).edit().apply { ids.forEach { remove(key(it)) } }.apply()
+    override fun onDeleted(context: Context, ids: IntArray) = inBackground {
+        Settings.get(context).update { it.copy(widgetFigures = it.widgetFigures - ids.toSet()) }
     }
 
     companion object {
-        private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        private fun key(widgetId: Int) = "widgetAccount$widgetId"
-
-        fun setFigure(context: Context, widgetId: Int, figure: WidgetFigure) =
-            prefs(context).edit().putLong(key(widgetId), figure.encode()).apply()
+        suspend fun setFigure(context: Context, widgetId: Int, figure: WidgetFigure) {
+            Settings.get(context).update { it.copy(widgetFigures = it.widgetFigures + (widgetId to figure)) }
+        }
 
         suspend fun refresh(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -61,10 +55,10 @@ class LeftWidget : AppWidgetProvider() {
         private suspend fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
             val ledger = Ledger.get(context)
             val accounts = ledger.dao.balances().first()
-            val prefs = prefs(context)
-            val fallback = defaultAccount(prefs, accounts, TxnKind.EXPENSE)?.let { WidgetFigure.Account(it) }
+            val prefs = Settings.get(context).current()
+            val fallback = defaultAccount(prefs.defaultAccounts, accounts, TxnKind.EXPENSE)?.let { WidgetFigure.Account(it) }
             for (id in ids) {
-                val chosen = WidgetFigure.decode(prefs.getLong(key(id), 0))
+                val chosen = prefs.widgetFigures[id]
                 val shown = chosen?.let { ledger.figureOf(it, accounts) } ?: fallback?.let { ledger.figureOf(it, accounts) }
                 manager.updateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_left).apply {
                     if (shown != null) {
@@ -76,6 +70,17 @@ class LeftWidget : AppWidgetProvider() {
                     setOnClickPendingIntent(R.id.root, QuickAdd.OPEN.pending(context))
                 })
             }
+        }
+    }
+}
+
+private fun BroadcastReceiver.inBackground(block: suspend () -> Unit) {
+    val pending = goAsync()
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            runCatching { block() }
+        } finally {
+            pending.finish()
         }
     }
 }

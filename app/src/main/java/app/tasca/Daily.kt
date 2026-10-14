@@ -16,6 +16,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.tasca.data.Ledger
 import app.tasca.data.get
+import app.tasca.ui.Settings
+import app.tasca.ui.get
 import kotlinx.coroutines.CancellationException
 import java.time.Duration
 import java.time.LocalTime
@@ -59,11 +61,8 @@ object Daily {
 object Reminder {
     const val ID = 1
     private const val CHANNEL = "reminder"
-    private const val KEY = "reminder"
 
-    private fun prefs(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-    fun isOn(context: Context) = prefs(context).getBoolean(KEY, true)
-    fun setOn(context: Context, on: Boolean) = prefs(context).edit().putBoolean(KEY, on).apply()
+    suspend fun isOn(context: Context) = Settings.get(context).current().reminder
 
     fun allowed(context: Context) = android.os.Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED

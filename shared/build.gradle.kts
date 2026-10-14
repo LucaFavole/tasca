@@ -38,6 +38,7 @@ kotlin {
             api("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
             api("androidx.room:room-runtime:2.8.5")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+            implementation("androidx.datastore:datastore-preferences:1.2.1")
         }
         androidMain.dependencies {
             implementation("androidx.sqlite:sqlite-framework:2.6.2")

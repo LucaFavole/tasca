@@ -54,6 +54,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -69,6 +70,8 @@ import app.tasca.data.TxnKind
 import app.tasca.domain.Money
 import app.tasca.domain.Period
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.Settings
+import app.tasca.ui.get
 import app.tasca.ui.screens.AccountsScreen
 import app.tasca.ui.screens.CategoriesScreen
 import app.tasca.ui.screens.EditHoldingScreen
@@ -87,7 +90,7 @@ class TascaApp : Application() {
     @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
-        Money.currency = getSharedPreferences("settings", Context.MODE_PRIVATE).getString("currency", "EUR")!!
+        useStoredCurrency(this)
         WorkManager.getInstance(this).cancelUniqueWork("recurring")
         Daily.schedule(this)
         scope.launch {
@@ -97,6 +100,11 @@ class TascaApp : Application() {
             }
         }
     }
+}
+
+/** Money is shown in the stored currency from the start: the widgets and the daily job run without the screens. */
+internal fun useStoredCurrency(context: Context) {
+    Money.currency = runBlocking { Settings.get(context).current().currency }
 }
 
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
@@ -167,12 +175,10 @@ private fun AppRoot(vm: AppViewModel, openRoute: MutableState<String?>) {
     }
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) Reminder.setOn(context, false)
+        if (!granted) vm.setReminder(false)
     }
     LaunchedEffect(Unit) {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        if (Build.VERSION.SDK_INT >= 33 && Reminder.isOn(context) && !Reminder.allowed(context) && !prefs.getBoolean("askedNotifications", false)) {
-            prefs.edit().putBoolean("askedNotifications", true).apply()
+        if (Build.VERSION.SDK_INT >= 33 && vm.reminder.value && !Reminder.allowed(context) && vm.firstNotificationPrompt()) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
