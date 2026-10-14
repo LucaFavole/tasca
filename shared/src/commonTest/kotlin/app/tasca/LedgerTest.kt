@@ -72,7 +72,7 @@ class LedgerTest {
         assertFalse(dao.categories().any { it.name == "Nuova categoria" })
     }
 
-    @Test fun duePaymentsArePostedOnceAndCountTowardsTheMonth() = runTest {
+    @Test fun duePaymentsArePostedOnce() = runTest {
         ledger.ensureSeeded()
         val main = dao.accounts().single().id
         dao.upsertRecurring(Recurring(
@@ -83,10 +83,6 @@ class LedgerTest {
         assertEquals(0, ledger.postDueRecurring(LocalDate(2026, 10, 15)))
         assertEquals(3, dao.allRecurring().single().posted)
         assertEquals(listOf(LocalDate(2026, 10, 15), LocalDate(2026, 9, 15), LocalDate(2026, 8, 15)), dao.allTxns().map { it.date }.sortedDescending())
-        val (name, left) = ledger.monthLeft(LocalDate(2026, 10, 16))!!
-        assertEquals("Main", name)
-        assertEquals(-3_000, left.leftCents)
-        assertEquals(-4_000, ledger.monthLeft(LocalDate(2026, 11, 1))!!.second.leftCents)
     }
 
     @Test fun deletingAnAccountInUseHidesItAndPausesItsPayments() = runTest {

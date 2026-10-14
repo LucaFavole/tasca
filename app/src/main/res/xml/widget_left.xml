@@ -8,4 +8,6 @@
     android:targetCellWidth="2"
     android:targetCellHeight="1"
     android:updatePeriodMillis="1800000"
+    android:configure="app.tasca.BalanceWidgetConfig"
+    android:widgetFeatures="reconfigurable"
     android:widgetCategory="home_screen" />

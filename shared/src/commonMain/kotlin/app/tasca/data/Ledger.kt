@@ -14,7 +14,6 @@ import androidx.room.useWriterConnection
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteDriver
 import androidx.sqlite.execSQL
-import app.tasca.domain.MonthLeft
 import app.tasca.domain.Trade
 import app.tasca.domain.TradeSide
 import app.tasca.io.AccountSheetRow
@@ -98,11 +97,6 @@ class Ledger(private val db: AppDb) {
         count
     }
 
-    /** What will be left this month in the main account, the oldest one not deleted; null when there is none. */
-    suspend fun monthLeft(today: LocalDate = today()): Pair<String, MonthLeft>? {
-        val main = dao.balances().first().firstOrNull { !it.deleted } ?: return null
-        return main.name to MonthLeft.of(today, main.id, main.balanceCents, dao.activeRecurring())
-    }
 
     /** Inserts or updates an account, giving a new one the next free code. */
     suspend fun saveAccount(a: Account): Long = transaction {
