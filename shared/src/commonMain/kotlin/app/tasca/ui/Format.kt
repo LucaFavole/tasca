@@ -12,4 +12,4 @@ internal expect fun formatQuantity(value: Double): String
 internal expect fun formatTwoDecimals(value: Double): String
 
 /** [value] rounded half up to at most [maxDecimals] decimals, without trailing zeros, with a decimal comma: "41,678225". */
-internal expect fun plainDecimal(value: Double, maxDecimals: Int): String
+internal expect fun plainDecimal(value: Double, maxDecimals: Int = 6): String

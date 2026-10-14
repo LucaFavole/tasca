@@ -56,15 +56,15 @@ import app.tasca.domain.StatsRange
 import app.tasca.domain.oneDecimal
 import app.tasca.domain.today
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.formatDate
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.SectionCard
 import app.tasca.ui.theme.LocalMoneyColors
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.YearMonth
 import kotlinx.datetime.minus
-import kotlinx.datetime.toJavaYearMonth
+import kotlinx.datetime.atTime
 import kotlinx.datetime.yearMonth
-import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 @Composable
@@ -221,10 +221,9 @@ private fun Chart(range: StatsRange, totals: List<MonthTotal>) {
             }
         }
         Row(Modifier.fillMaxWidth()) {
-            val fmt = DateTimeFormatter.ofPattern("MMM")
             byMonth.forEachIndexed { i, (ym, _, _) ->
                 Text(
-                    if (shown.size <= 8 || i % ((shown.size + 7) / 8) == 0) ym.format(fmt).take(3) else "",
+                    if (shown.size <= 8 || i % ((shown.size + 7) / 8) == 0) ym.format(MONTH).take(3) else "",
                     Modifier.weight(1f), textAlign = TextAlign.Center, maxLines = 1,
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -268,10 +267,10 @@ private fun Weights(ins: Insights) {
     }
 }
 
-private fun YearMonth.format(formatter: DateTimeFormatter): String = toJavaYearMonth().format(formatter)
+private fun YearMonth.format(pattern: String): String = formatDate(firstDay.atTime(0, 0), pattern)
 
-private val MONTH = DateTimeFormatter.ofPattern("MMM")
-private val MONTH_YEAR = DateTimeFormatter.ofPattern("MMM yyyy")
+private const val MONTH = "MMM"
+private const val MONTH_YEAR = "MMM yyyy"
 
 private fun shortRange(r: StatsRange): String = r.from.format(MONTH).take(3) + "–" + r.to.format(MONTH).take(3)
 

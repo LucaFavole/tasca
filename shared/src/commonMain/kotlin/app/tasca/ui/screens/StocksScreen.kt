@@ -51,15 +51,14 @@ import app.tasca.domain.Money
 import app.tasca.io.LedgerSheets
 import app.tasca.io.SymbolHit
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.formatDate
+import app.tasca.ui.formatQuantity
+import app.tasca.ui.formatTwoDecimals
 import app.tasca.ui.theme.LocalMoneyColors
 import kotlinx.coroutines.launch
-import java.text.DecimalFormat
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-private val QTY = DecimalFormat("#,##0.####")
-private val TIME = DateTimeFormatter.ofPattern("d MMM HH:mm")
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Instant
 
 @Composable
 private fun gainColor(cents: Long) = when {
@@ -68,7 +67,7 @@ private fun gainColor(cents: Long) = when {
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-private fun pct(p: Double?) = p?.let { (if (it > 0) "+" else "") + "%.2f%%".format(it) } ?: ""
+private fun pct(p: Double?) = p?.let { (if (it > 0) "+" else "") + formatTwoDecimals(it) + "%" } ?: ""
 
 @Composable
 fun StocksScreen(vm: AppViewModel, onBack: () -> Unit, onEdit: (Long?) -> Unit) {
@@ -107,7 +106,7 @@ fun StocksScreen(vm: AppViewModel, onBack: () -> Unit, onEdit: (Long?) -> Unit) 
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        updated?.let { "Prices from Yahoo Finance, " + Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(TIME) } ?: "",
+                        updated?.let { "Prices from Yahoo Finance, " + formatDate(Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.currentSystemDefault()), "d MMM HH:mm") } ?: "",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(12.dp))
@@ -156,7 +155,7 @@ private fun HoldingRow(h: Holding, q: app.tasca.data.Quote?, onClick: () -> Unit
             val day = q?.previousClose?.takeIf { it > 0 }?.let { (q.price - it) * 100 / it }
             Text(
                 listOfNotNull(
-                    "${QTY.format(h.quantity)} × " + (q?.let { "%.2f %s".format(it.price, it.currency) } ?: "…"),
+                    "${formatQuantity(h.quantity)} × " + (q?.let { formatTwoDecimals(it.price) + " " + it.currency } ?: "…"),
                     day?.let { "today ${pct(it)}" },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

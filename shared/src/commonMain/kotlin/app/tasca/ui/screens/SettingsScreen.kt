@@ -1,10 +1,5 @@
 package app.tasca.ui.screens
 
-import android.Manifest
-import app.tasca.Reminder
-import androidx.compose.ui.platform.LocalContext
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,9 +71,11 @@ import app.tasca.io.LedgerSheets
 import app.tasca.ui.AppIcons
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.CategoryUsage
+import app.tasca.ui.Platform
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.SectionCard
 import app.tasca.ui.theme.ThemeMode
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,7 +93,7 @@ fun SubScreen(title: String, onBack: () -> Unit, actions: @Composable () -> Unit
 }
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Unit) {
+fun SettingsScreen(vm: AppViewModel, platform: Platform, onBack: () -> Unit, onCategories: () -> Unit) {
     val theme by vm.theme.collectAsStateWithLifecycle()
     val currency by vm.currency.collectAsStateWithLifecycle()
     var confirmErase by remember { mutableStateOf(false) }
@@ -107,15 +104,11 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
     val defaultNames = remember(balances, defaults) {
         TxnKind.entries.associateWith { k -> balances.firstOrNull { it.id == vm.defaultAccount(k) }?.name ?: "None" }
     }
-    val context = LocalContext.current
     val reminder by vm.reminder.collectAsStateWithLifecycle()
-    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) vm.setReminder(false)
-    }
-    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importExcel) }
-    val exporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-    ) { uri -> uri?.let(vm::exportExcel) }
+    val notifications = platform.rememberNotificationAsk(onDenied = { vm.setReminder(false) })
+    val importer = platform.rememberImportPicker(vm::importExcel)
+    val exporter = platform.rememberExportPicker(vm::exportExcel)
+    val scope = rememberCoroutineScope()
 
     SubScreen("Settings", onBack) {
         LazyColumn(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -133,10 +126,10 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
             item {
                 SectionCard(title = "Excel") {
                     ActionRow(Icons.Outlined.FileUpload, "Import from Excel", "Your old app's file or a Tasca backup. Anything already present is skipped.") {
-                        importer.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream"))
+                        importer()
                     }
                     ActionRow(Icons.Outlined.FileDownload, "Export to Excel", "Everything: transactions, accounts, opening balances and investments. Keep it as a backup.") {
-                        exporter.launch(vm.exportFileName())
+                        exporter(vm.exportFileName())
                     }
                 }
             }
@@ -161,7 +154,8 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
                         trailingContent = {
                             Switch(reminder, { on ->
                                 vm.setReminder(on)
-                                if (on && !Reminder.allowed(context)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                // Undispatched, so Android asks within the tap as before; iOS has to wait for the answer.
+                                if (on) scope.launch(start = CoroutineStart.UNDISPATCHED) { if (!notifications.allowed()) notifications.ask() }
                             })
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),

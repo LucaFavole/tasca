@@ -1,6 +1,5 @@
 package app.tasca.ui.screens
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -50,7 +49,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,6 +65,7 @@ import app.tasca.domain.PeriodKind
 import app.tasca.domain.today
 import app.tasca.ui.AppViewModel
 import app.tasca.ui.HomeView
+import app.tasca.ui.formatDate
 import app.tasca.ui.components.Donut
 import app.tasca.ui.components.EmptyHint
 import app.tasca.ui.components.LegendRow
@@ -74,8 +76,8 @@ import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
-import kotlinx.datetime.toJavaLocalDate
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.atTime
+import kotlin.math.roundToLong
 
 /**
  * The month at a glance and every transaction in it: one header (account, period, expenses and income),
@@ -98,6 +100,10 @@ fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long
     val categories by vm.categories.collectAsStateWithLifecycle()
     var searching by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
     val narrowed by vm.homeNarrowed.collectAsStateWithLifecycle()
+    // Deprecated for NavigationEventHandler, but on Android this one is androidx.activity's BackHandler, and the app's
+    // activity 1.9 does not dispatch navigation events.
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Suppress("DEPRECATION")
     BackHandler(enabled = searching || narrowed) {
         if (searching) {
             searching = false
@@ -175,7 +181,7 @@ fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long
                 }
                 totals.forEach { t ->
                     item(key = t.categoryId) {
-                        LegendRow(t.icon, Color(t.color), t.name, if (sum > 0) Math.round(t.totalCents * 100.0 / sum).toInt() else 0, t.totalCents) {
+                        LegendRow(t.icon, Color(t.color), t.name, if (sum > 0) (t.totalCents * 100.0 / sum).roundToLong().toInt() else 0, t.totalCents) {
                             vm.homeCategory.value = t.categoryId
                             vm.homeListKind.value = null
                             vm.homeView.value = HomeView.TRANSACTIONS
@@ -272,14 +278,12 @@ fun PeriodBar(period: Period, onChange: (Period) -> Unit) {
     }
 }
 
-private val DAY = DateTimeFormatter.ofPattern("EEE d MMM")
-
 fun relativeDay(d: LocalDate): String {
     val today = today()
     return when (d) {
         today -> "Today"
         today.plus(1, DateTimeUnit.DAY) -> "Tomorrow"
         today.minus(1, DateTimeUnit.DAY) -> "Yesterday"
-        else -> d.toJavaLocalDate().format(DAY)
+        else -> formatDate(d.atTime(0, 0), "EEE d MMM")
     }
 }

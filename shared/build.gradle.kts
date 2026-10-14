@@ -44,9 +44,14 @@ kotlin {
             api("org.jetbrains.compose.runtime:runtime:1.12.1")
             api("org.jetbrains.compose.foundation:foundation:1.12.1")
             api("org.jetbrains.compose.ui:ui:1.12.1")
+            implementation("org.jetbrains.compose.ui:ui-backhandler:1.12.1")
             // The last stable Material 3; the releases paired with Compose 1.10 and later are alphas.
             api("org.jetbrains.compose.material3:material3:1.9.0")
             implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+            api("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+            // The last stable release; the one paired with Compose 1.12 is still a release candidate.
+            implementation("org.jetbrains.androidx.navigation:navigation-compose:2.9.2")
         }
         androidMain.dependencies {
             implementation("androidx.sqlite:sqlite-framework:2.6.2")

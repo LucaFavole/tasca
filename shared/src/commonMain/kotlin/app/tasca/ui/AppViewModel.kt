@@ -1,8 +1,6 @@
 package app.tasca.ui
 
-import android.app.Application
-import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.tasca.data.Account
 import app.tasca.data.AccountBalance
@@ -10,7 +8,6 @@ import app.tasca.data.Budget
 import app.tasca.data.Category
 import app.tasca.data.Holding
 import app.tasca.data.Ledger
-import app.tasca.data.get
 import app.tasca.data.Recurring
 import app.tasca.data.Txn
 import app.tasca.data.TxnKind
@@ -22,6 +19,7 @@ import app.tasca.domain.SpokenParser
 import app.tasca.domain.TradeSide
 import app.tasca.domain.Period
 import app.tasca.domain.PeriodKind
+import app.tasca.domain.isoCurrency
 import app.tasca.domain.today
 import app.tasca.io.LedgerSheets
 import app.tasca.io.SymbolHit
@@ -30,6 +28,7 @@ import app.tasca.io.Xlsx
 import app.tasca.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,15 +41,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.yearMonth
-import java.util.Currency
 
 enum class HomeView { CATEGORIES, TRANSACTIONS }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class AppViewModel(app: Application) : AndroidViewModel(app) {
-    val ledger = Ledger.get(app)
+class AppViewModel(private val ledger: Ledger, private val settings: Settings) : ViewModel() {
     private val dao = ledger.dao
-    private val settings = Settings.get(app)
     // Read before the first frame, so a chosen theme never starts as the system one.
     private val stored = runBlocking { settings.current() }
 
@@ -228,10 +224,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setCurrency(code: String) {
-        val c = runCatching { Currency.getInstance(code.uppercase()) }.getOrNull() ?: return say("Unknown currency $code")
-        save { it.copy(currency = c.currencyCode) }
-        Money.currency = c.currencyCode
-        _currency.value = c.currencyCode
+        val c = isoCurrency(code) ?: return say("Unknown currency $code")
+        save { it.copy(currency = c) }
+        Money.currency = c
+        _currency.value = c
     }
 
     fun setReminder(on: Boolean) {
@@ -305,9 +301,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         say("All data erased")
     }
 
-    fun importExcel(uri: Uri) = io {
-        val resolver = getApplication<Application>().contentResolver
-        val sheets = Xlsx.read(resolver.openInputStream(uri)!!.use { it.readBytes() })
+    fun importExcel(read: () -> ByteArray) = io {
+        val sheets = Xlsx.read(read())
         val parsed = LedgerSheets.read(sheets)
         val r = ledger.import(parsed)
         if (r.fresh) applySettings(parsed.config.settings)
@@ -320,14 +315,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         say("Imported ${r.added} (${r.skipped} already present$extra). New: ${r.newAccounts} accounts, ${r.newCategories} categories$config$kept")
     }
 
-    fun exportExcel(uri: Uri) = io {
+    /** [write] returns false when the user backed out of saving. */
+    fun exportExcel(write: suspend (ByteArray) -> Boolean) = io {
         val settings = mapOf(
             "currency" to _currency.value, "theme" to _theme.value.name, "taxRate" to taxRatePct.toString(),
             "reminder" to _reminder.value.toString(),
         )
         val book = ledger.exportBook(_currency.value, settings)
-        getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(Xlsx.write(book)) }
-        say("Exported ${book.take(3).sumOf { it.rows.size - 2 }} transactions, with accounts, regular payments, budgets and settings")
+        if (write(Xlsx.write(book))) say("Exported ${book.take(3).sumOf { it.rows.size - 2 }} transactions, with accounts, regular payments, budgets and settings")
     }
 
     /** Settings restored from a backup onto a phone that had no data yet; unknown or broken values are skipped. */

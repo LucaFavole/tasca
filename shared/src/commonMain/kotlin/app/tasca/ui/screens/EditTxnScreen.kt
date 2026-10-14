@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -78,17 +76,14 @@ import app.tasca.domain.Money
 import app.tasca.domain.ReceiptScan
 import app.tasca.domain.Spoken
 import app.tasca.domain.today
-import app.tasca.ui.rememberReceiptScanner
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.Platform
+import app.tasca.ui.imeVisible
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.kindColor
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
-import kotlinx.datetime.toJavaLocalDate
-import kotlinx.datetime.toKotlinLocalDate
-import java.time.Instant
-import java.time.ZoneOffset
 
 /** Shared draft for a transaction or a recurring payment; both screens edit the same fields. */
 class TxnDraft(kind: TxnKind) {
@@ -173,7 +168,7 @@ class TxnDraft(kind: TxnKind) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind.EXPENSE, onDone: () -> Unit) {
+fun EditTxnScreen(vm: AppViewModel, platform: Platform, txnId: Long?, initialKind: TxnKind = TxnKind.EXPENSE, onDone: () -> Unit) {
     val draft = rememberSaveable(saver = TxnDraft.Saver) { TxnDraft(initialKind) }
     var recurringId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Set once the draft is filled, so a draft restored after rotation or process death isn't overwritten.
@@ -183,7 +178,7 @@ fun EditTxnScreen(vm: AppViewModel, txnId: Long?, initialKind: TxnKind = TxnKind
     var error by remember { mutableStateOf<String?>(null) }
     val selected by vm.selectedAccount.collectAsStateWithLifecycle()
     var reading by remember { mutableStateOf(false) }
-    val scanReceipt = rememberReceiptScanner(onStart = { reading = true }) { r ->
+    val scanReceipt = platform.rememberReceiptScanner(onStart = { reading = true }) { r ->
         reading = false
         if (r != null) error = draft.load(r, vm.categories.value)
     }
@@ -371,12 +366,12 @@ fun DraftFields(vm: AppViewModel, draft: TxnDraft, showDate: Boolean = true) {
     )
 
     if (picking) {
-        val state = rememberDatePickerState(draft.date.toJavaLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
+        val state = rememberDatePickerState(draft.date.pickerMillis())
         DatePickerDialog(
             onDismissRequest = { picking = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { draft.date = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toKotlinLocalDate() }
+                    state.selectedDateMillis?.let { draft.date = pickedDate(it) }
                     picking = false
                 }) { Text("OK") }
             },
@@ -384,6 +379,13 @@ fun DraftFields(vm: AppViewModel, draft: TxnDraft, showDate: Boolean = true) {
         ) { DatePicker(state) }
     }
 }
+
+/** The date picker works in milliseconds since 1970 at midnight UTC. */
+internal fun LocalDate.pickerMillis(): Long = toEpochDays() * MILLIS_PER_DAY
+
+internal fun pickedDate(millis: Long): LocalDate = LocalDate.fromEpochDays(millis.floorDiv(MILLIS_PER_DAY))
+
+private const val MILLIS_PER_DAY = 86_400_000L
 
 /** One scrollable line of chips, so many accounts never push the rest of the form off screen. */
 @Composable
@@ -429,8 +431,7 @@ fun NewCategoryDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
 
 @Composable
 fun Keypad(draft: TxnDraft, saveLabel: String, error: String?, onSave: () -> Unit) {
-    @OptIn(ExperimentalLayoutApi::class)
-    val showKeys = !WindowInsets.isImeVisible
+    val showKeys = !imeVisible()
     fun press(k: String) {
         val e = draft.expr
         draft.expr = when (k) {

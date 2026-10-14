@@ -51,9 +51,9 @@ import app.tasca.domain.TradeSide
 import app.tasca.io.LedgerSheets
 import app.tasca.io.SymbolHit
 import app.tasca.ui.AppViewModel
+import app.tasca.ui.plainDecimal
 import kotlinx.coroutines.launch
-import java.math.BigDecimal
-import java.math.RoundingMode
+import kotlin.math.roundToLong
 
 @Composable
 fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
@@ -75,8 +75,8 @@ fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
         existing?.let {
             picked = SymbolHit(it.symbol, it.name, "", "")
             accountId = it.accountId
-            quantity = decimal(it.quantity)
-            avgPrice = decimal(it.investedCents / 100.0 / it.quantity, 2)
+            quantity = plainDecimal(it.quantity)
+            avgPrice = plainDecimal(it.investedCents / 100.0 / it.quantity, 2)
         }
     }
     LaunchedEffect(picked?.symbol) { livePrice = null; picked?.let { livePrice = vm.livePrice(it.symbol) } }
@@ -96,7 +96,7 @@ fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(p.name, style = MaterialTheme.typography.titleMedium)
                         val now = livePrice?.let { (price, cur) ->
-                            " · today ${Money.format(Math.round(price * 100))}" + if (cur != currency) " (from $cur)" else ""
+                            " · today ${Money.format((price * 100).roundToLong())}" + if (cur != currency) " (from $cur)" else ""
                         }.orEmpty()
                         Text(listOf(p.symbol, p.exchange).filter { it.isNotEmpty() }.joinToString(" · ") + now, style = MaterialTheme.typography.bodySmall)
                     }
@@ -235,9 +235,9 @@ private fun TradeDialog(
     onConfirm: (shares: Double, price: Double, feeCents: Long, taxRatePct: Double, taxCents: Long) -> Unit,
 ) {
     var shares by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf(livePrice?.let { decimal(it, 2) } ?: "") }
+    var price by remember { mutableStateOf(livePrice?.let { plainDecimal(it, 2) } ?: "") }
     var fee by remember { mutableStateOf("1") }
-    var taxRate by remember { mutableStateOf(decimal(defaultTaxRate, 2)) }
+    var taxRate by remember { mutableStateOf(plainDecimal(defaultTaxRate, 2)) }
     var error by remember { mutableStateOf<String?>(null) }
     val buy = side == TradeSide.BUY
     AlertDialog(
@@ -247,7 +247,7 @@ private fun TradeDialog(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(
                     shares, { shares = it }, label = { Text("Shares") }, singleLine = true,
-                    supportingText = { if (!buy) Text("You have ${decimal(h.quantity)}") },
+                    supportingText = { if (!buy) Text("You have ${plainDecimal(h.quantity)}") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 OutlinedTextField(
@@ -290,7 +290,7 @@ private fun TradeDialog(
                 val f = LedgerSheets.parseAmount(fee.ifBlank { "0" })
                 error = when {
                     s == null || s <= 0 -> "Enter the shares"
-                    !buy && s > h.quantity + 1e-6 -> "You only have ${decimal(h.quantity)}"
+                    !buy && s > h.quantity + 1e-6 -> "You only have ${plainDecimal(h.quantity)}"
                     p == null || p <= 0 -> "Enter the price"
                     f == null || f < 0 -> "Enter the fee, or 0"
                     !buy && (number(taxRate) ?: -1.0) !in 0.0..100.0 -> "Enter a tax rate between 0 and 100"
@@ -311,6 +311,3 @@ private fun TradeDialog(
 private fun number(s: String): Double? = s.trim().replace(" ", "").let {
     if (it.contains(',')) it.replace(".", "").replace(',', '.') else it
 }.toDoubleOrNull()?.takeIf { it.isFinite() }
-
-private fun decimal(v: Double, maxDecimals: Int = 6): String =
-    BigDecimal(v).setScale(maxDecimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',')

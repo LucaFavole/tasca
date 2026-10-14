@@ -74,10 +74,6 @@ import app.tasca.ui.theme.LocalMoneyColors
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
-import kotlinx.datetime.toJavaLocalDate
-import kotlinx.datetime.toKotlinLocalDate
-import java.time.Instant
-import java.time.ZoneOffset
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -300,13 +296,13 @@ fun EditRecurringScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
 
     if (pickStart || pickEnd) {
         val initial = if (pickStart) draft.date else endDate ?: draft.date.plus(1, DateTimeUnit.YEAR)
-        val state = rememberDatePickerState(initial.toJavaLocalDate().atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli())
+        val state = rememberDatePickerState(initial.pickerMillis())
         DatePickerDialog(
             onDismissRequest = { pickStart = false; pickEnd = false },
             confirmButton = {
                 TextButton(onClick = {
                     state.selectedDateMillis?.let {
-                        val d = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toKotlinLocalDate()
+                        val d = pickedDate(it)
                         if (pickStart) draft.date = d else endDate = d
                     }
                     pickStart = false; pickEnd = false
