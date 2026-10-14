@@ -11,5 +11,5 @@ internal expect fun formatQuantity(value: Double): String
 /** Two decimals, rounded half up, in the phone's language: "12,35". */
 internal expect fun formatTwoDecimals(value: Double): String
 
-/** [value] rounded half up to at most [maxDecimals] decimals, without trailing zeros, with a decimal comma: "41,678225". */
+/** [value] rounded half up to at most [maxDecimals] decimals, without trailing zeros, with a decimal comma: "12,345678". */
 internal expect fun plainDecimal(value: Double, maxDecimals: Int = 6): String

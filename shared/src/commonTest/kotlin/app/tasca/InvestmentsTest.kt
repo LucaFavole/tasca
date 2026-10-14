@@ -88,10 +88,10 @@ class InvestmentsTest {
     }
 
     @Test fun sellingEverythingLeavesNoDust() {
-        val p = Trade.apply(TradeSide.SELL, 41.678225, 1_106_640, 41.678225, 250.0)
+        val p = Trade.apply(TradeSide.SELL, 12.345678, 333_333, 12.345678, 250.0)
         assertEquals(0.0, p.quantity, 0.0)
         assertEquals(0, p.investedCents)
-        assertEquals(Trade.cents(41.678225, 250.0) - 1_106_640, p.realizedCents)
+        assertEquals(Trade.cents(12.345678, 250.0) - 333_333, p.realizedCents)
     }
 
     @Test fun cannotSellMoreThanHeld() {

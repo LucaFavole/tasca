@@ -20,8 +20,8 @@ class ExcelTest {
     private val rows = listOf(
         SheetRow(TxnKind.EXPENSE, LocalDate(2026, 10, 9), "Main", null, "Attività fisica", 9000, "scarpe & <calze>"),
         SheetRow(TxnKind.EXPENSE, LocalDate(2026, 10, 9), "Main", null, "Attività fisica", 9000, "scarpe & <calze>"),
-        SheetRow(TxnKind.INCOME, LocalDate(2026, 9, 27), "risparmi", null, "Stipendio", 263105, ""),
-        SheetRow(TxnKind.TRANSFER, LocalDate(2026, 9, 27), "risparmi", "TR investimenti", null, 200000, "inv"),
+        SheetRow(TxnKind.INCOME, LocalDate(2026, 9, 27), "risparmi", null, "Stipendio", 180000, ""),
+        SheetRow(TxnKind.TRANSFER, LocalDate(2026, 9, 27), "risparmi", "TR investimenti", null, 50000, "inv"),
     )
 
     @Test fun exportThenImportGivesBackTheSameRows() {
@@ -31,8 +31,8 @@ class ExcelTest {
     }
 
     @Test fun backupKeepsOpeningBalancesAndInvestments() {
-        val accounts = listOf(AccountSheetRow("Main", 969_303, false), AccountSheetRow("Monaco", 0, true))
-        val holdings = listOf(HoldingSheetRow("TR investimenti", "SPYY.DE", "SPDR ACWI", 41.678225, 1_106_640))
+        val accounts = listOf(AccountSheetRow("Main", 120_000, false), AccountSheetRow("Monaco", 0, true))
+        val holdings = listOf(HoldingSheetRow("TR investimenti", "SPYY.DE", "SPDR ACWI", 12.345678, 333_333))
         val parsed = LedgerSheets.read(Xlsx.read(Xlsx.write(LedgerSheets.write(rows, "EUR", Config(accounts, holdings)))))
         assertEquals(accounts, parsed.config.accounts)
         assertEquals(holdings, parsed.config.holdings)

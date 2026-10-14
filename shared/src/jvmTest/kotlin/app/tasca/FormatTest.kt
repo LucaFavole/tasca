@@ -42,7 +42,7 @@ class FormatTest {
     }
 
     @Test fun plainDecimalsRoundTheExactBinaryValue() {
-        assertEquals("41,678225", plainDecimal(41.678225, 6))
+        assertEquals("12,345678", plainDecimal(12.345678, 6))
         assertEquals("265,52", plainDecimal(265.52, 6))
         assertEquals("0,3", plainDecimal(0.1 + 0.2, 6))
         // 0.1234565 is stored as 0.12345649999…, so it rounds down.

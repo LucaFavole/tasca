@@ -116,7 +116,7 @@ fun EditHoldingScreen(vm: AppViewModel, id: Long?, onDone: () -> Unit) {
                 ChipRow(balances.filter { !it.deleted || it.id == accountId }.map { it.id to it.name }, accountId) { accountId = it }
                 Label("Shares")
                 OutlinedTextField(
-                    quantity, { quantity = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("e.g. 41,678225") },
+                    quantity, { quantity = it }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("e.g. 12,345678") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 Label("Average buy price ($currency)")
@@ -307,7 +307,7 @@ private fun TradeDialog(
     )
 }
 
-/** Accepts "41,678225", "1.234,5" and "265.52". */
+/** Accepts "12,345678", "1.234,5" and "265.52". */
 private fun number(s: String): Double? = s.trim().replace(" ", "").let {
     if (it.contains(',')) it.replace(".", "").replace(',', '.') else it
 }.toDoubleOrNull()?.takeIf { it.isFinite() }

@@ -74,7 +74,7 @@ class UpgradeTest {
             execSQL("INSERT INTO recurring (id, name, kind, amountCents, accountId, toAccountId, categoryId, frequency, every, startDate, endDate, posted, active) " +
                 "VALUES (1, 'Affitto', 'EXPENSE', 80000, 1, NULL, 1, 'MONTHLY', 1, ${LocalDate(2026, 1, 25).toEpochDays()}, NULL, 9, 1)")
             execSQL("INSERT INTO budget (categoryId, monthlyCents) VALUES (1, 90000)")
-            execSQL("INSERT INTO holding (id, accountId, symbol, name, quantity, investedCents) VALUES (1, 2, 'SPYY.DE', 'SPDR ACWI', 41.678225, 1106640)")
+            execSQL("INSERT INTO holding (id, accountId, symbol, name, quantity, investedCents) VALUES (1, 2, 'SPYY.DE', 'SPDR ACWI', 12.345678, 333333)")
             execSQL("INSERT INTO quote (symbol, price, previousClose, currency, rateToApp, fetchedAt) VALUES ('SPYY.DE', 250.5, NULL, 'EUR', 1.0, 0)")
         }
         val ledger = Ledger.open(Room.databaseBuilder<AppDb>(name = file.path))
@@ -83,7 +83,7 @@ class UpgradeTest {
             val rent = ledger.dao.allRecurring().single()
             assertEquals(Frequency.MONTHLY to LocalDate(2026, 10, 25), rent.frequency to rent.nextDate)
             assertEquals(LocalDate(2026, 9, 25), ledger.dao.allTxns().first { it.note == "Affitto" }.date)
-            assertEquals(41.678225, ledger.dao.holdings().single().quantity, 0.0)
+            assertEquals(12.345678, ledger.dao.holdings().single().quantity, 0.0)
             assertEquals(0, ledger.postDueRecurring(LocalDate(2026, 10, 24)))
             val exported = LedgerSheets.read(Xlsx.read(Xlsx.write(ledger.exportBook("EUR"))))
             assertEquals(3, exported.rows.size)
