@@ -53,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -171,7 +172,11 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot(vm: AppViewModel, openRoute: MutableState<String?>) {
     val nav = rememberNavController()
     LaunchedEffect(openRoute.value) {
-        openRoute.value?.let { openRoute.value = null; nav.navigate(it) }
+        val route = openRoute.value ?: return@LaunchedEffect
+        // The NavHost sets its graph when it is first laid out, which can come after this effect starts.
+        nav.currentBackStackEntryFlow.first()
+        openRoute.value = null
+        nav.navigate(route)
     }
     val context = LocalContext.current
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
