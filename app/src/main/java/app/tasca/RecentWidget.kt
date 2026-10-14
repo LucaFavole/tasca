@@ -10,15 +10,12 @@ import android.widget.RemoteViews
 import androidx.core.widget.RemoteViewsCompat
 import app.tasca.data.Ledger
 import app.tasca.data.TxnKind
-import app.tasca.data.TxnRow
 import app.tasca.data.get
-import app.tasca.domain.Money
-import app.tasca.ui.screens.relativeDay
+import app.tasca.ui.RecentRow
+import app.tasca.ui.recentRows
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDate
 
 /** Home-screen widget listing the latest transactions; tapping one opens it, tapping the title opens the app. */
 class RecentWidget : AppWidgetProvider() {
@@ -41,7 +38,6 @@ class RecentWidget : AppWidgetProvider() {
 
     companion object {
         private const val ROWS = 30
-        private val ALL_TIME = LocalDate(1900, 1, 1) to LocalDate(2999, 12, 31)
 
         suspend fun refresh(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -50,7 +46,7 @@ class RecentWidget : AppWidgetProvider() {
         }
 
         private suspend fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
-            val rows = Ledger.get(context).dao.txnRows(ALL_TIME.first, ALL_TIME.second, null, null, "", ROWS).first()
+            val rows = Ledger.get(context).recentRows(ROWS)
             val items = RemoteViewsCompat.RemoteCollectionItems.Builder()
                 .apply { rows.forEach { addItem(it.id, row(context, it)) } }
                 .setHasStableIds(true)
@@ -72,21 +68,10 @@ class RecentWidget : AppWidgetProvider() {
             }
         }
 
-        private fun row(context: Context, t: TxnRow) = RemoteViews(context.packageName, R.layout.widget_recent_row).apply {
-            val transfer = t.kind == TxnKind.TRANSFER
-            setTextViewText(R.id.name, t.note.ifBlank { t.categoryName ?: "Transfer" })
-            setTextViewText(
-                R.id.detail,
-                (if (transfer) "${t.accountName} → ${t.toAccountName}" else t.accountName) + " · " + relativeDay(t.date),
-            )
-            setTextViewText(
-                R.id.amount,
-                when (t.kind) {
-                    TxnKind.EXPENSE -> "−" + Money.format(t.amountCents)
-                    TxnKind.INCOME -> "+" + Money.format(t.amountCents)
-                    TxnKind.TRANSFER -> Money.format(t.amountCents)
-                },
-            )
+        private fun row(context: Context, t: RecentRow) = RemoteViews(context.packageName, R.layout.widget_recent_row).apply {
+            setTextViewText(R.id.name, t.name)
+            setTextViewText(R.id.detail, t.detail)
+            setTextViewText(R.id.amount, t.amount)
             setTextColor(
                 R.id.amount,
                 when (t.kind) {
