@@ -211,9 +211,11 @@ fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long
                         }
                     }
                     items(dayRows, key = { it.id }) { row ->
+                        // Never settle as dismissed: the delete removes the row anyway, and the state is saved under the row's
+                        // key, so a row brought back by Undo would otherwise return still swiped away and stop swiping.
                         val swipe = rememberSwipeToDismissBoxState(confirmValueChange = {
                             if (it == SwipeToDismissBoxValue.EndToStart) vm.deleteTxnUndoable(row.id)
-                            it == SwipeToDismissBoxValue.EndToStart
+                            false
                         })
                         SwipeToDismissBox(
                             swipe, enableDismissFromStartToEnd = false,
