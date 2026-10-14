@@ -4,7 +4,7 @@ import WidgetKit
 @main
 struct TascaWidgets: WidgetBundle {
     var body: some Widget {
-        LeftWidget()
+        BalanceWidget()
         QuickAddWidget()
         AddExpenseControl()
     }
