@@ -111,8 +111,8 @@ interface LedgerDao {
     )
     fun categoryMonths(from: LocalDate, to: LocalDate, accountId: Long?): Flow<List<app.tasca.domain.CategoryMonth>>
 
-    /** Emits on every change to accounts, transactions or regular payments; the value itself means nothing. */
-    @Query("SELECT (SELECT COUNT(*) FROM account) + (SELECT COUNT(*) FROM txn) + (SELECT COUNT(*) FROM recurring)")
+    /** Emits on every change to accounts, transactions, regular payments, holdings or prices; the value itself means nothing. */
+    @Query("SELECT (SELECT COUNT(*) FROM account) + (SELECT COUNT(*) FROM txn) + (SELECT COUNT(*) FROM recurring) + (SELECT COUNT(*) FROM holding) + (SELECT COUNT(*) FROM quote)")
     fun ledgerChanges(): Flow<Int>
 
     @Query("SELECT * FROM recurring ORDER BY active DESC, name COLLATE NOCASE")
@@ -138,6 +138,7 @@ interface LedgerDao {
     @Query("DELETE FROM holding WHERE id = :id") suspend fun deleteHolding(id: Long)
 
     @Query("SELECT * FROM quote") fun quotesFlow(): Flow<List<Quote>>
+    @Query("SELECT * FROM quote") suspend fun quotes(): List<Quote>
     @Upsert suspend fun upsertQuotes(q: List<Quote>)
 
     @Query("DELETE FROM holding") suspend fun clearHoldings()

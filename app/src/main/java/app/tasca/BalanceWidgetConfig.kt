@@ -19,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
@@ -29,7 +30,7 @@ import app.tasca.ui.theme.TascaTheme
 import app.tasca.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
-/** Asks which account a newly placed balance widget shows; also opens when the widget is reconfigured. */
+/** Asks what a newly placed balance widget shows: the Total, the Net worth or one account; also opens on reconfigure. */
 class BalanceWidgetConfig : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,17 +42,21 @@ class BalanceWidgetConfig : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val all by accounts.collectAsState(emptyList())
+            val choices by produceState(emptyList<Pair<WidgetFigure, Pair<String, Long>>>(), all) {
+                val figures = listOf(WidgetFigure.Total, WidgetFigure.NetWorth) + all.filter { !it.deleted }.map { WidgetFigure.Account(it.id) }
+                value = figures.mapNotNull { f -> LeftWidget.figureOf(this@BalanceWidgetConfig, f, all)?.let { f to it } }
+            }
             TascaTheme(ThemeMode.SYSTEM) {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.safeDrawingPadding().padding(16.dp)) {
-                        Text("Show which account?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(8.dp))
+                        Text("Show what?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(8.dp))
                         LazyColumn {
-                            items(all.filter { !it.deleted }, key = { it.id }) { a ->
+                            items(choices, key = { it.first.encode() }) { (figure, shown) ->
                                 ListItem(
-                                    headlineContent = { Text(a.name) },
-                                    trailingContent = { Text(Money.format(a.balanceCents)) },
+                                    headlineContent = { Text(shown.first) },
+                                    trailingContent = { Text(Money.format(shown.second)) },
                                     modifier = Modifier.clickable {
-                                        LeftWidget.setAccount(this@BalanceWidgetConfig, widgetId, a.id)
+                                        LeftWidget.setFigure(this@BalanceWidgetConfig, widgetId, figure)
                                         lifecycleScope.launch {
                                             runCatching { LeftWidget.refresh(this@BalanceWidgetConfig) }
                                             setResult(RESULT_OK, done)
