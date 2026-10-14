@@ -1,5 +1,6 @@
 package app.tasca.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -89,6 +90,13 @@ fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long
     val listKind by vm.homeListKind.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     var searching by rememberSaveable { mutableStateOf(query.isNotEmpty()) }
+    val narrowed by vm.homeNarrowed.collectAsStateWithLifecycle()
+    BackHandler(enabled = searching || narrowed) {
+        if (searching) {
+            searching = false
+            vm.homeQuery.value = ""
+        } else vm.homeBack()
+    }
 
     Column {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.Top) {

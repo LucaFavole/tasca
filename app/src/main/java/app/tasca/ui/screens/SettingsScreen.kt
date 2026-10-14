@@ -63,6 +63,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.tasca.data.TxnKind
+import androidx.compose.material.icons.outlined.Check
 import app.tasca.data.Account
 import app.tasca.data.AccountBalance
 import app.tasca.data.Category
@@ -99,6 +101,12 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
     val currency by vm.currency.collectAsStateWithLifecycle()
     var confirmErase by remember { mutableStateOf(false) }
     var editCurrency by remember { mutableStateOf(false) }
+    var pickDefault by remember { mutableStateOf<TxnKind?>(null) }
+    val balances by vm.balances.collectAsStateWithLifecycle()
+    val defaultsVersion by vm.defaultsVersion.collectAsStateWithLifecycle()
+    val defaultNames = remember(balances, defaultsVersion) {
+        TxnKind.entries.associateWith { k -> balances.firstOrNull { it.id == vm.defaultAccount(k) }?.name ?: "None" }
+    }
     val context = LocalContext.current
     var reminder by remember { mutableStateOf(Reminder.isOn(context)) }
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -114,6 +122,12 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
             item {
                 SectionCard {
                     NavRow("Categories", "Edit names, icons and colours", onCategories)
+                }
+            }
+            item {
+                SectionCard(title = "Default accounts") {
+                    NavRow("Expenses", defaultNames.getValue(TxnKind.EXPENSE)) { pickDefault = TxnKind.EXPENSE }
+                    NavRow("Income", defaultNames.getValue(TxnKind.INCOME)) { pickDefault = TxnKind.INCOME }
                 }
             }
             item {
@@ -179,6 +193,29 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onCategories: () -> Uni
             dismissButton = { TextButton(onClick = { confirmErase = false }) { Text("Cancel") } },
         )
     }
+    pickDefault?.let { kind ->
+        AlertDialog(
+            onDismissRequest = { pickDefault = null },
+            title = { Text(if (kind == TxnKind.INCOME) "New income goes to" else "New expenses go to") },
+            text = {
+                Column {
+                    balances.filter { !it.deleted }.forEach { a ->
+                        ListItem(
+                            headlineContent = { Text(a.name) },
+                            trailingContent = { if (a.id == vm.defaultAccount(kind)) Icon(Icons.Outlined.Check, null) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clip(MaterialTheme.shapes.medium).clickable {
+                                vm.setDefaultAccount(kind, a.id)
+                                pickDefault = null
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { pickDefault = null }) { Text("Cancel") } },
+        )
+    }
+
     if (editCurrency) {
         var code by remember { mutableStateOf(currency) }
         AlertDialog(

@@ -95,6 +95,8 @@ class TxnDraft(kind: TxnKind) {
     var kind by mutableStateOf(kind)
     var expr by mutableStateOf("")
     var accountId by mutableStateOf<Long?>(null)
+    /** The account was filled in from the defaults, so it follows the default of each kind until picked by hand. */
+    var autoAccount by mutableStateOf(false)
     var toAccountId by mutableStateOf<Long?>(null)
     var categoryId by mutableStateOf<Long?>(null)
     var date by mutableStateOf(today())
@@ -116,12 +118,12 @@ class TxnDraft(kind: TxnKind) {
     }
 
     fun load(t: Txn) {
-        kind = t.kind; expr = Money.plain(t.amountCents).replace('.', ','); accountId = t.accountId
+        kind = t.kind; expr = Money.plain(t.amountCents).replace('.', ','); accountId = t.accountId; autoAccount = false
         toAccountId = t.toAccountId; categoryId = t.categoryId; date = t.date; note = t.note
     }
 
     fun load(r: Recurring) {
-        kind = r.kind; expr = Money.plain(r.amountCents).replace('.', ','); accountId = r.accountId
+        kind = r.kind; expr = Money.plain(r.amountCents).replace('.', ','); accountId = r.accountId; autoAccount = false
         toAccountId = r.toAccountId; categoryId = r.categoryId; date = r.startDate; note = r.name
     }
 
@@ -153,7 +155,7 @@ class TxnDraft(kind: TxnKind) {
 
     companion object {
         val Saver = listSaver<TxnDraft, Any?>(
-            save = { listOf(it.kind.name, it.expr, it.accountId, it.toAccountId, it.categoryId, it.date.toEpochDays(), it.note) },
+            save = { listOf(it.kind.name, it.expr, it.accountId, it.toAccountId, it.categoryId, it.date.toEpochDays(), it.note, it.autoAccount) },
             restore = {
                 TxnDraft(TxnKind.valueOf(it[0] as String)).apply {
                     expr = it[1] as String
@@ -162,6 +164,7 @@ class TxnDraft(kind: TxnKind) {
                     categoryId = it[4] as Long?
                     date = LocalDate.fromEpochDays(it[5] as Long)
                     note = it[6] as String
+                    autoAccount = it[7] as Boolean
                 }
             },
         )
@@ -285,8 +288,9 @@ fun DraftFields(vm: AppViewModel, draft: TxnDraft, showDate: Boolean = true) {
     var newCategory by remember { mutableStateOf(false) }
     val accounts = balances.filter { !it.deleted || it.id == draft.accountId || it.id == draft.toAccountId }
 
-    LaunchedEffect(accounts.size) {
-        if (draft.accountId == null) draft.accountId = accounts.firstOrNull()?.id
+    LaunchedEffect(accounts.size, draft.kind) {
+        if (draft.accountId == null) draft.autoAccount = true
+        if (draft.autoAccount) draft.accountId = vm.defaultAccount(draft.kind)
     }
 
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -312,6 +316,7 @@ fun DraftFields(vm: AppViewModel, draft: TxnDraft, showDate: Boolean = true) {
     Label(if (draft.kind == TxnKind.TRANSFER) "From account" else "Account")
     ChipRow(accounts.map { it.id to it.name }, draft.accountId) {
         draft.accountId = it
+        draft.autoAccount = false
         if (draft.toAccountId == it) draft.toAccountId = null
     }
     if (draft.kind == TxnKind.TRANSFER) {

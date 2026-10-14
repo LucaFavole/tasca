@@ -2,11 +2,13 @@ package app.tasca.ui
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.tasca.Reminder
 import app.tasca.data.Account
+import app.tasca.data.AccountBalance
 import app.tasca.data.Budget
 import app.tasca.data.Category
 import app.tasca.data.Holding
@@ -81,6 +83,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val homeRows = combine(selectedAccount, homePeriod, homeCategory, homeQuery) { acc, p, cat, q ->
         dao.txnRows(p.start, p.end, acc, cat, q.trim(), 2000)
     }.flatMapLatest { it }.state(emptyList())
+
+    /**
+     * The account a new transaction of [kind] starts on: the one chosen in Settings, else "Main" for expenses and
+     * "Risparmi" for income when such accounts exist, else the first account.
+     */
+    fun defaultAccount(kind: TxnKind): Long? = defaultAccount(prefs, balances.value, kind)
+
+    fun setDefaultAccount(kind: TxnKind, id: Long) {
+        prefs.edit().putLong(defaultAccountKey(kind), id).apply()
+        defaultsVersion.value++
+    }
+
+    /** Bumped when a default account changes, so Settings shows the new choice. */
+    val defaultsVersion = MutableStateFlow(0)
+
+    /** Whether Home shows anything other than its default: all accounts, this month, categories. */
+    val homeNarrowed = combine(
+        combine(selectedAccount, homePeriod, ::Pair), homeView, homeCategory, homeListKind,
+    ) { (acc, p), v, cat, k -> acc != null || p != Period.of(PeriodKind.MONTH) || v != HomeView.CATEGORIES || cat != null || k != null }
+        .state(false)
+
+    /** Undoes the narrowest Home filter, so Back steps out of filters one at a time before leaving the app. */
+    fun homeBack() {
+        when {
+            homeCategory.value != null -> homeCategory.value = null
+            homeListKind.value != null -> homeListKind.value = null
+            homeView.value != HomeView.CATEGORIES -> homeView.value = HomeView.CATEGORIES
+            else -> {
+                selectedAccount.value = null
+                homePeriod.value = Period.of(PeriodKind.MONTH)
+            }
+        }
+    }
 
     /** Shows one account's whole history as a list, as "See transactions" on Accounts asks. */
     fun showTransactions(accountId: Long) {
@@ -286,3 +321,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
 /** What deleting a category touches: [txns] must move elsewhere, [recurring] payments are deleted with it. */
 data class CategoryUsage(val txns: Int, val recurring: Int)
+
+private fun defaultAccountKey(kind: TxnKind) = if (kind == TxnKind.INCOME) "defaultIncomeAccount" else "defaultExpenseAccount"
+
+/** The default account of [kind] among [accounts]; the balance widget uses it too, so both agree. */
+fun defaultAccount(prefs: SharedPreferences, accounts: List<AccountBalance>, kind: TxnKind): Long? {
+    val active = accounts.filter { !it.deleted }
+    fun named(name: String) = active.firstOrNull { it.name.equals(name, ignoreCase = true) }?.id
+    val chosen = prefs.getLong(defaultAccountKey(kind), -1).takeIf { id -> active.any { it.id == id } }
+    val expense = named("Main") ?: active.firstOrNull()?.id
+    return chosen ?: if (kind == TxnKind.INCOME) named("Risparmi") ?: expense else expense
+}
