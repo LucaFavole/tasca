@@ -12,7 +12,12 @@ object Money {
         return formatAmount(cents, currency, if (decimals) 2 else 0)
     }
 
-    fun signed(cents: Long): String = (if (cents > 0) "+" else "") + format(cents)
+    /** "+7,00 €" or "−7,00 €" with a true minus sign, as the transaction rows show amounts. */
+    fun signed(cents: Long): String = when {
+        cents > 0 -> "+" + format(cents)
+        cents < 0 -> "−" + format(-cents)
+        else -> format(0)
+    }
 
     fun fromDouble(value: Double): Long {
         val (negative, digits) = roundHalfUp(value, 2)

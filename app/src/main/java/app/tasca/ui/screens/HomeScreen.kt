@@ -1,6 +1,16 @@
 package app.tasca.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.fillMaxSize
+import kotlin.math.abs
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -108,6 +118,14 @@ fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long
             IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Settings") }
         }
         LazyColumn(
+            modifier = Modifier.fillMaxSize().pointerInput(period) {
+                if (period.kind == PeriodKind.ALL) return@pointerInput
+                var dx = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dx = 0f },
+                    onDragEnd = { if (abs(dx) > 120.dp.toPx()) vm.homePeriod.value = period.shift(if (dx < 0) 1 else -1) },
+                ) { _, delta -> dx += delta }
+            },
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = contentPadding.calculateBottomPadding() + 88.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -197,7 +215,24 @@ fun HomeScreen(vm: AppViewModel, contentPadding: PaddingValues, onEditTxn: (Long
                             if (net != 0L) Text(Money.signed(net), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    items(dayRows, key = { it.id }) { TxnItem(it, selected) { onEditTxn(it.id) } }
+                    items(dayRows, key = { it.id }) { row ->
+                        val swipe = rememberSwipeToDismissBoxState(confirmValueChange = {
+                            if (it == SwipeToDismissBoxValue.EndToStart) vm.deleteTxnUndoable(row.id)
+                            it == SwipeToDismissBoxValue.EndToStart
+                        })
+                        SwipeToDismissBox(
+                            swipe, enableDismissFromStartToEnd = false,
+                            backgroundContent = {
+                                Box(
+                                    Modifier.fillMaxSize().clip(MaterialTheme.shapes.medium).background(MaterialTheme.colorScheme.errorContainer)
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = Alignment.CenterEnd,
+                                ) { Icon(Icons.Outlined.Delete, "Delete", tint = MaterialTheme.colorScheme.onErrorContainer) }
+                            },
+                        ) {
+                            Box(Modifier.background(MaterialTheme.colorScheme.background)) { TxnItem(row, selected) { onEditTxn(row.id) } }
+                        }
+                    }
                 }
             }
         }

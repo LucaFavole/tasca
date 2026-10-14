@@ -404,7 +404,7 @@ fun ChipRow(items: List<Pair<Long, String>>, selected: Long?, disabled: Long? = 
 @Composable
 fun CategoryTile(c: Category, selected: Boolean, onClick: () -> Unit) {
     Column(
-        Modifier.width(76.dp).clickable(onClick = onClick).padding(4.dp),
+        Modifier.width(90.dp).clickable(onClick = onClick).padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         IconBubble(c.icon, Color(c.color), 44.dp, selected)

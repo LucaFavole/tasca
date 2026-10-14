@@ -59,7 +59,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _currency = MutableStateFlow(prefs.getString("currency", "EUR")!!)
     val currency = _currency.asStateFlow()
 
-    val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val messages = MutableSharedFlow<Message>(extraBufferCapacity = 4)
 
     private fun <T> kotlinx.coroutines.flow.Flow<T>.state(initial: T): StateFlow<T> =
         stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initial)
@@ -231,7 +231,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _currency.value = c.currencyCode
     }
 
-    private fun say(msg: String) { messages.tryEmit(msg) }
+    private fun say(msg: String) { messages.tryEmit(Message(msg)) }
 
     private fun io(block: suspend () -> Unit) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { block() } }.onFailure { say(it.message ?: "Something went wrong") }
@@ -249,6 +249,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveTxn(t: Txn) = io { dao.upsertTxn(t) }
     fun deleteTxn(id: Long) = io { dao.deleteTxn(id); say("Deleted") }
+
+    /** Deletes from a swipe, offering Undo, which puts the same transaction back. */
+    fun deleteTxnUndoable(id: Long) = io {
+        val t = dao.txn(id) ?: return@io
+        dao.deleteTxn(id)
+        messages.tryEmit(Message("Deleted", "Undo") { saveTxn(t) })
+    }
 
     fun saveAccount(a: Account) = io { ledger.saveAccount(a) }
     fun deleteAccount(id: Long) = io {
@@ -332,3 +339,6 @@ fun defaultAccount(prefs: SharedPreferences, accounts: List<AccountBalance>, kin
     val expense = named("Main") ?: active.firstOrNull()?.id
     return chosen ?: if (kind == TxnKind.INCOME) named("Risparmi") ?: expense else expense
 }
+
+/** A snackbar line; [action] runs when its [actionLabel] is tapped. */
+class Message(val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)

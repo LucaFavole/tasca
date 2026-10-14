@@ -32,7 +32,7 @@ class PinTest {
             assertEquals(expected.second, Money.format(cents, compact = true), "$cents compact")
         }
         assertEquals("+1,00$nb€", Money.signed(100))
-        assertEquals("-1,00$nb€", Money.signed(-100))
+        assertEquals("−1,00$nb€", Money.signed(-100))
         assertEquals("0,00$nb€", Money.signed(0))
         Money.currency = "USD"
         assertEquals("1.234,56${nb}USD", Money.format(123456))
