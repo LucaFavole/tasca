@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.tasca.data.TxnKind
 import app.tasca.data.WidgetFigure
+import app.tasca.ui.theme.ColorTheme
 import app.tasca.ui.theme.ThemeMode
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,7 @@ data class Prefs(
     val defaultAccounts: DefaultAccounts = DefaultAccounts(),
     /** What each placed balance widget shows, by widget id. */
     val widgetFigures: Map<Int, WidgetFigure> = emptyMap(),
+    val colors: ColorTheme = ColorTheme.VIOLET,
 )
 
 /** The accounts picked in Settings › Default accounts; null where none was picked. Transfers use the expense one. */
@@ -62,6 +64,7 @@ class Settings internal constructor(private val store: DataStore<Preferences>) {
         const val NAME = "settings"
 
         private val THEME = stringPreferencesKey("theme")
+        private val COLORS = stringPreferencesKey("colors")
         private val CURRENCY = stringPreferencesKey("currency")
         private val TAX_RATE = floatPreferencesKey("taxRate")
         private val REMINDER = booleanPreferencesKey("reminder")
@@ -74,6 +77,7 @@ class Settings internal constructor(private val store: DataStore<Preferences>) {
         private fun Preferences.toPrefs() = Prefs().let { d ->
             Prefs(
                 theme = this[THEME]?.let { t -> ThemeMode.entries.firstOrNull { it.name == t } } ?: d.theme,
+                colors = this[COLORS]?.let { t -> ColorTheme.entries.firstOrNull { it.name == t } } ?: d.colors,
                 currency = this[CURRENCY] ?: d.currency,
                 taxRatePct = this[TAX_RATE]?.toDouble() ?: d.taxRatePct,
                 reminder = this[REMINDER] ?: d.reminder,
@@ -89,6 +93,7 @@ class Settings internal constructor(private val store: DataStore<Preferences>) {
 
         private fun MutablePreferences.put(p: Prefs) {
             this[THEME] = p.theme.name
+            this[COLORS] = p.colors.name
             this[CURRENCY] = p.currency
             this[TAX_RATE] = p.taxRatePct.toFloat()
             this[REMINDER] = p.reminder

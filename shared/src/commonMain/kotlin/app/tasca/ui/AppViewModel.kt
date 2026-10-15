@@ -25,6 +25,7 @@ import app.tasca.io.LedgerSheets
 import app.tasca.io.SymbolHit
 import app.tasca.io.Yahoo
 import app.tasca.io.Xlsx
+import app.tasca.ui.theme.ColorTheme
 import app.tasca.ui.theme.ThemeMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -52,6 +53,8 @@ class AppViewModel(private val ledger: Ledger, private val settings: Settings) :
 
     private val _theme = MutableStateFlow(stored.theme)
     val theme = _theme.asStateFlow()
+    private val _colors = MutableStateFlow(stored.colors)
+    val colors = _colors.asStateFlow()
     private val _currency = MutableStateFlow(stored.currency)
     val currency = _currency.asStateFlow()
     private val _reminder = MutableStateFlow(stored.reminder)
@@ -223,6 +226,11 @@ class AppViewModel(private val ledger: Ledger, private val settings: Settings) :
         _theme.value = mode
     }
 
+    fun setColors(colors: ColorTheme) {
+        save { it.copy(colors = colors) }
+        _colors.value = colors
+    }
+
     fun setCurrency(code: String) {
         val c = isoCurrency(code) ?: return say("Unknown currency $code")
         save { it.copy(currency = c) }
@@ -318,7 +326,7 @@ class AppViewModel(private val ledger: Ledger, private val settings: Settings) :
     /** [write] returns false when the user backed out of saving. */
     fun exportExcel(write: suspend (ByteArray) -> Boolean) = io {
         val settings = mapOf(
-            "currency" to _currency.value, "theme" to _theme.value.name, "taxRate" to taxRatePct.toString(),
+            "currency" to _currency.value, "theme" to _theme.value.name, "colors" to _colors.value.name, "taxRate" to taxRatePct.toString(),
             "reminder" to _reminder.value.toString(),
         )
         val book = ledger.exportBook(_currency.value, settings)
@@ -329,6 +337,7 @@ class AppViewModel(private val ledger: Ledger, private val settings: Settings) :
     private suspend fun applySettings(settings: Map<String, String>) = withContext(Dispatchers.Main) {
         settings["currency"]?.let(::setCurrency)
         settings["theme"]?.let { t -> ThemeMode.entries.firstOrNull { it.name == t } }?.let(::setTheme)
+        settings["colors"]?.let { t -> ColorTheme.entries.firstOrNull { it.name == t } }?.let(::setColors)
         settings["taxRate"]?.toDoubleOrNull()?.takeIf { it in 0.0..100.0 }?.let { taxRatePct = it }
         settings["reminder"]?.toBooleanStrictOrNull()?.let(::setReminder)
     }

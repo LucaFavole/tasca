@@ -69,7 +69,8 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 @Composable
 fun TascaUi(vm: AppViewModel, platform: Platform, openRoute: MutableState<String?>) {
     val theme by vm.theme.collectAsStateWithLifecycle()
-    TascaTheme(theme) { AppRoot(vm, platform, openRoute) }
+    val colors by vm.colors.collectAsStateWithLifecycle()
+    TascaTheme(theme, colors) { AppRoot(vm, platform, openRoute) }
 }
 
 @Composable

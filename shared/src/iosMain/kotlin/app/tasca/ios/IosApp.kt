@@ -64,7 +64,8 @@ object IosApp {
             Box(Modifier.fillMaxSize()) {
                 TascaUi(model, IosPlatform, openRoute)
                 val theme by model.theme.collectAsState()
-                TascaTheme(theme) { Voice.Dialog() }
+                val colors by model.colors.collectAsState()
+                TascaTheme(theme, colors) { Voice.Dialog() }
             }
         }
         IosPlatform.host = controller

@@ -74,7 +74,11 @@ import app.tasca.ui.CategoryUsage
 import app.tasca.ui.Platform
 import app.tasca.ui.components.IconBubble
 import app.tasca.ui.components.SectionCard
+import app.tasca.ui.theme.ColorTheme
 import app.tasca.ui.theme.ThemeMode
+import app.tasca.ui.theme.availableColorThemes
+import app.tasca.ui.theme.scheme
+import androidx.compose.ui.graphics.luminance
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -95,6 +99,7 @@ fun SubScreen(title: String, onBack: () -> Unit, actions: @Composable () -> Unit
 @Composable
 fun SettingsScreen(vm: AppViewModel, platform: Platform, onBack: () -> Unit, onCategories: () -> Unit) {
     val theme by vm.theme.collectAsStateWithLifecycle()
+    val colors by vm.colors.collectAsStateWithLifecycle()
     val currency by vm.currency.collectAsStateWithLifecycle()
     var confirmErase by remember { mutableStateOf(false) }
     var editCurrency by remember { mutableStateOf(false) }
@@ -135,13 +140,22 @@ fun SettingsScreen(vm: AppViewModel, platform: Platform, onBack: () -> Unit, onC
             }
             item {
                 SectionCard(title = "Appearance") {
+                    ThemePicker(colors, vm::setColors)
+                    Spacer(Modifier.height(12.dp))
                     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                         ThemeMode.entries.forEachIndexed { i, m ->
-                            SegmentedButton(theme == m, { vm.setTheme(m) }, SegmentedButtonDefaults.itemShape(i, 3)) {
+                            SegmentedButton(
+                                theme == m, { vm.setTheme(m) }, SegmentedButtonDefaults.itemShape(i, 3), enabled = !colors.darkOnly,
+                            ) {
                                 Text(m.name.lowercase().replaceFirstChar(Char::uppercase))
                             }
                         }
                     }
+                    if (colors.darkOnly) Text(
+                        "${colors.label} is always dark",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+                    )
                     Spacer(Modifier.height(8.dp))
                     NavRow("Currency", currency) { editCurrency = true }
                 }
@@ -223,6 +237,39 @@ fun SettingsScreen(vm: AppViewModel, platform: Platform, onBack: () -> Unit, onC
             confirmButton = { TextButton(onClick = { vm.setCurrency(code); editCurrency = false }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { editCurrency = false }) { Text("Cancel") } },
         )
+    }
+}
+
+/** Each colour theme as a swatch of its background and accent, three to a row. */
+@Composable
+private fun ThemePicker(selected: ColorTheme, onPick: (ColorTheme) -> Unit) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        availableColorThemes().chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { t ->
+                    val look = t.scheme(dark)
+                    val ring = if (t == selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                    Column(
+                        Modifier.weight(1f).clip(MaterialTheme.shapes.medium).clickable { onPick(t) }.padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            Modifier.size(48.dp).border(if (t == selected) 3.dp else 1.dp, ring, CircleShape).padding(4.dp)
+                                .clip(CircleShape).background(look.background),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.size(18.dp).clip(CircleShape).background(look.primary))
+                        }
+                        Text(
+                            t.label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp),
+                            fontWeight = if (t == selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 

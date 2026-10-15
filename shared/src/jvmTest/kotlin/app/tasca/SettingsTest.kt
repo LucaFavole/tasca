@@ -5,6 +5,7 @@ import app.tasca.data.WidgetFigure
 import app.tasca.ui.DefaultAccounts
 import app.tasca.ui.Prefs
 import app.tasca.ui.Settings
+import app.tasca.ui.theme.ColorTheme
 import app.tasca.ui.theme.ThemeMode
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
@@ -41,5 +42,12 @@ class SettingsTest {
         assertEquals(DefaultAccounts(expense = 2, income = 5), now.defaultAccounts)
         assertEquals(mapOf(4 to WidgetFigure.Total, 5 to WidgetFigure.NetWorth), now.widgetFigures)
         assertEquals(2L, now.defaultAccounts.of(TxnKind.TRANSFER))
+    }
+
+    @Test fun colorThemeStartsAsVioletAndKeepsTheChoice() = runTest {
+        val settings = fresh()
+        assertEquals(ColorTheme.VIOLET, settings.current().colors)
+        settings.update { it.copy(colors = ColorTheme.MIDNIGHT) }
+        assertEquals(ColorTheme.MIDNIGHT, settings.current().colors)
     }
 }

@@ -6,6 +6,7 @@ import android.content.Intent
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.core.app.ActivityScenario
@@ -52,11 +54,12 @@ class TabsAndSettingsTest {
         compose.waitUntilAtLeastOneExists(hasText("Main"), 30_000)
         for (next in listOf("Stats", "Plan", "Home")) {
             compose.onNodeWithContentDescription("Settings").performClick()
-            compose.onNodeWithText("Daily reminder").assertExists()
+            compose.onNodeWithText("Export to Excel").assertExists()
             compose.onNodeWithContentDescription("Back").performClick()
             compose.onNodeWithText(next).performClick()
         }
         compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Daily reminder"))
         compose.onNodeWithText("Daily reminder").assertExists()
         compose.onNodeWithText("Import from Excel").assertExists()
         compose.onNodeWithText("Export to Excel").assertExists()
