@@ -47,8 +47,9 @@ class RecentWidget : AppWidgetProvider() {
 
         private suspend fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
             val rows = Ledger.get(context).recentRows(ROWS)
+            val paint = WidgetPaint.of(context)
             val items = RemoteViewsCompat.RemoteCollectionItems.Builder()
-                .apply { rows.forEach { addItem(it.id, row(context, it)) } }
+                .apply { rows.forEach { addItem(it.id, row(context, paint, it)) } }
                 .setHasStableIds(true)
                 .setViewTypeCount(1)
                 .build()
@@ -59,6 +60,11 @@ class RecentWidget : AppWidgetProvider() {
             )
             for (id in ids) {
                 val views = RemoteViews(context.packageName, R.layout.widget_recent).apply {
+                    with(paint) {
+                        tint(R.id.bg) { it.background }
+                        text(R.id.title) { it.subtext }
+                        text(R.id.empty) { it.subtext }
+                    }
                     setOnClickPendingIntent(R.id.title, QuickAdd.OPEN.pending(context))
                     setPendingIntentTemplate(R.id.list, openTxn)
                     setEmptyView(R.id.list, R.id.empty)
@@ -68,18 +74,21 @@ class RecentWidget : AppWidgetProvider() {
             }
         }
 
-        private fun row(context: Context, t: RecentRow) = RemoteViews(context.packageName, R.layout.widget_recent_row).apply {
+        private fun row(context: Context, paint: WidgetPaint, t: RecentRow) = RemoteViews(context.packageName, R.layout.widget_recent_row).apply {
             setTextViewText(R.id.name, t.name)
             setTextViewText(R.id.detail, t.detail)
             setTextViewText(R.id.amount, t.amount)
-            setTextColor(
-                R.id.amount,
-                when (t.kind) {
-                    TxnKind.EXPENSE -> 0xFFFF6B6B.toInt()
-                    TxnKind.INCOME -> 0xFF3DDC97.toInt()
-                    TxnKind.TRANSFER -> 0xFFFFFFFF.toInt()
-                },
-            )
+            with(paint) {
+                text(R.id.name) { it.text }
+                text(R.id.detail) { it.subtext }
+                text(R.id.amount) {
+                    when (t.kind) {
+                        TxnKind.EXPENSE -> it.expense
+                        TxnKind.INCOME -> it.income
+                        TxnKind.TRANSFER -> it.text
+                    }
+                }
+            }
             setOnClickFillInIntent(R.id.row, Intent().putExtra(MainActivity.EXTRA_TXN, t.id))
         }
     }

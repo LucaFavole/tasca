@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
@@ -29,6 +30,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -47,6 +51,21 @@ class TascaApp : Application() {
                 runCatching { RecentWidget.refresh(this@TascaApp) }
             }
         }
+        scope.launch {
+            Settings.get(this@TascaApp).prefs.map { it.theme to it.colors }.distinctUntilChanged().drop(1).collect { repaintWidgets() }
+        }
+    }
+
+    /** A new wallpaper changes the Wallpaper theme's colours, and before Android 12 widgets can't follow dark mode alone. */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        scope.launch { repaintWidgets() }
+    }
+
+    private suspend fun repaintWidgets() {
+        runCatching { LeftWidget.refresh(this) }
+        runCatching { RecentWidget.refresh(this) }
+        runCatching { QuickAddWidget.refresh(this) }
     }
 }
 

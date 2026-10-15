@@ -3,6 +3,7 @@ package app.tasca.ui.theme
 import android.R.color.*
 import android.os.Build
 import android.app.Activity
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -16,9 +17,10 @@ import androidx.core.view.WindowCompat
  * mid-grey and leave the red and green amounts unreadable. In the resource names 100 is a light tone, 900 a dark one.
  */
 @Composable
-internal actual fun wallpaperLook(dark: Boolean): Look? {
+internal actual fun wallpaperLook(dark: Boolean): Look? = wallpaperLook(LocalContext.current, dark)
+
+internal fun wallpaperLook(context: Context, dark: Boolean): Look? {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-    val context = LocalContext.current
     fun c(id: Int) = Color(context.getColor(id))
     return if (dark) Look(
         c(system_accent1_200), c(system_accent1_800), c(system_accent1_700), c(system_accent1_100),

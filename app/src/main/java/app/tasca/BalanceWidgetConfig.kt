@@ -29,7 +29,9 @@ import app.tasca.data.figureOf
 import app.tasca.data.get
 import app.tasca.domain.Money
 import app.tasca.ui.theme.TascaTheme
-import app.tasca.ui.theme.ThemeMode
+import app.tasca.ui.Settings
+import app.tasca.ui.get
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 
 /** Asks what a newly placed balance widget shows: the Total, the Net worth or one account; also opens on reconfigure. */
@@ -42,6 +44,7 @@ class BalanceWidgetConfig : ComponentActivity() {
         if (widgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return finish()
         val ledger = Ledger.get(this)
         val accounts = ledger.dao.balances()
+        val prefs = runBlocking { Settings.get(this@BalanceWidgetConfig).current() }
         enableEdgeToEdge()
         setContent {
             val all by accounts.collectAsState(emptyList())
@@ -49,7 +52,7 @@ class BalanceWidgetConfig : ComponentActivity() {
                 val figures = listOf(WidgetFigure.Total, WidgetFigure.NetWorth) + all.filter { !it.deleted }.map { WidgetFigure.Account(it.id) }
                 value = figures.mapNotNull { f -> ledger.figureOf(f, all)?.let { f to it } }
             }
-            TascaTheme(ThemeMode.SYSTEM) {
+            TascaTheme(prefs.theme, prefs.colors) {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.safeDrawingPadding().padding(16.dp)) {
                         Text("Show what?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(8.dp))

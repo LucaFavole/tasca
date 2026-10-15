@@ -11,6 +11,10 @@ import app.tasca.data.Ledger
 import app.tasca.data.WidgetFigure
 import app.tasca.data.get
 import app.tasca.domain.Money
+import app.tasca.ui.Settings
+import app.tasca.ui.get
+import app.tasca.ui.theme.ColorTheme
+import app.tasca.ui.theme.ThemeMode
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -54,5 +58,23 @@ class BalanceWidgetTest {
         val deadline = System.currentTimeMillis() + 10_000
         while (shown() != expected && System.currentTimeMillis() < deadline) Thread.sleep(20)
         assertEquals("widget $widget", expected, shown())
+    }
+}
+
+/** A balance widget draws in the colours of the theme picked in Settings. */
+@RunWith(AndroidJUnit4::class)
+@Config(application = Application::class, sdk = [34])
+class WidgetThemeTest {
+    @Test fun balanceWidgetUsesTheChosenTheme() = runBlocking {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        Ledger.get(context).ensureSeeded()
+        Settings.get(context).update { it.copy(theme = ThemeMode.LIGHT, colors = ColorTheme.GRAPHITE) }
+        val widgets = shadowOf(AppWidgetManager.getInstance(context))
+        val id = widgets.createWidget(LeftWidget::class.java, R.layout.widget_left)
+        val deadline = System.currentTimeMillis() + 10_000
+        while (widgets.getViewFor(id).findViewById<TextView>(R.id.title).text == "Account" && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        val view = widgets.getViewFor(id)
+        assertEquals("Graphite's light grey label", 0xFF5E5E5E.toInt(), view.findViewById<TextView>(R.id.title).currentTextColor)
+        assertEquals("the light theme's income green", 0xFF12A36B.toInt(), view.findViewById<TextView>(R.id.amount).currentTextColor)
     }
 }

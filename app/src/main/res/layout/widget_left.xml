@@ -1,31 +1,44 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
-    android:gravity="center_vertical"
-    android:orientation="vertical"
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="8dp">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:text="Account"
-        android:textColor="#B3FFFFFF"
-        android:textSize="12sp" />
+    <ImageView
+        android:id="@+id/bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg"
+        android:tint="#FF222338" />
 
-    <TextView
-        android:id="@+id/amount"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:maxLines="1"
-        android:text="—"
-        android:textColor="#3DDC97"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp">
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Account"
+            android:textColor="#B3FFFFFF"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/amount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:text="—"
+            android:textColor="#3DDC97"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+</FrameLayout>

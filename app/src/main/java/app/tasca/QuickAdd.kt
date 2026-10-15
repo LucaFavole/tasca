@@ -3,9 +3,13 @@ package app.tasca
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** Ways to open the app straight into adding something: from the home-screen widget or the daily reminder. */
 enum class QuickAdd {
@@ -31,10 +35,43 @@ enum class QuickAdd {
 /** Home-screen widget with two buttons: + opens the keypad, the microphone adds by voice. */
 class QuickAddWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        val views = RemoteViews(context.packageName, R.layout.widget_quick_add).apply {
-            setOnClickPendingIntent(R.id.add, QuickAdd.KEYPAD.pending(context))
-            setOnClickPendingIntent(R.id.voice, QuickAdd.VOICE.pending(context))
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                runCatching { update(context, manager, ids) }
+            } finally {
+                pending.finish()
+            }
         }
-        manager.updateAppWidget(ids, views)
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return super.onReceive(context, intent)
+        val manager = AppWidgetManager.getInstance(context)
+        onUpdate(context, manager, manager.getAppWidgetIds(ComponentName(context, QuickAddWidget::class.java)))
+    }
+
+    companion object {
+        suspend fun refresh(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, QuickAddWidget::class.java))
+            if (ids.isNotEmpty()) update(context, manager, ids)
+        }
+
+        private suspend fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
+            val paint = WidgetPaint.of(context)
+            val views = RemoteViews(context.packageName, R.layout.widget_quick_add).apply {
+                with(paint) {
+                    tint(R.id.bg) { it.background }
+                    tint(R.id.add_bg) { it.add }
+                    tint(R.id.add_icon) { it.onAdd }
+                    tint(R.id.voice_bg) { it.voice }
+                    tint(R.id.voice_icon) { it.onVoice }
+                }
+                setOnClickPendingIntent(R.id.add, QuickAdd.KEYPAD.pending(context))
+                setOnClickPendingIntent(R.id.voice, QuickAdd.VOICE.pending(context))
+            }
+            manager.updateAppWidget(ids, views)
+        }
     }
 }

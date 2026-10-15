@@ -56,16 +56,21 @@ class LeftWidget : AppWidgetProvider() {
             val ledger = Ledger.get(context)
             val accounts = ledger.dao.balances().first()
             val prefs = Settings.get(context).current()
+            val paint = WidgetPaint.of(context)
             val fallback = defaultAccount(prefs.defaultAccounts, accounts, TxnKind.EXPENSE)?.let { WidgetFigure.Account(it) }
             for (id in ids) {
                 val chosen = prefs.widgetFigures[id]
                 val shown = chosen?.let { ledger.figureOf(it, accounts) } ?: fallback?.let { ledger.figureOf(it, accounts) }
                 manager.updateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_left).apply {
-                    if (shown != null) {
-                        val (name, cents) = shown
-                        setTextViewText(R.id.title, name)
-                        setTextViewText(R.id.amount, Money.format(cents))
-                        setTextColor(R.id.amount, if (cents >= 0) 0xFF3DDC97.toInt() else 0xFFFF6B6B.toInt())
+                    with(paint) {
+                        tint(R.id.bg) { it.background }
+                        text(R.id.title) { it.subtext }
+                        if (shown != null) {
+                            val (name, cents) = shown
+                            setTextViewText(R.id.title, name)
+                            setTextViewText(R.id.amount, Money.format(cents))
+                            text(R.id.amount) { if (cents >= 0) it.income else it.expense }
+                        }
                     }
                     setOnClickPendingIntent(R.id.root, QuickAdd.OPEN.pending(context))
                 })

@@ -104,16 +104,31 @@ private val Midnight = Look(
     c(0xFFE8E8EE), c(0xFFA0A0AC), c(0xFF3E3E48), c(0xFF24242A),
 )
 
-/** This theme's colours; Wallpaper falls back to Violet where the system has none. */
-@Composable
-fun ColorTheme.scheme(dark: Boolean): ColorScheme = when (this) {
-    ColorTheme.VIOLET -> (if (dark) VioletDark else VioletLight).scheme(dark)
-    ColorTheme.PROFESSIONAL -> (if (dark) ProfessionalDark else ProfessionalLight).scheme(dark)
-    ColorTheme.FOREST -> (if (dark) ForestDark else ForestLight).scheme(dark)
-    ColorTheme.GRAPHITE -> (if (dark) GraphiteDark else GraphiteLight).scheme(dark)
-    ColorTheme.WALLPAPER -> wallpaperLook(dark)?.scheme(dark) ?: ColorTheme.VIOLET.scheme(dark)
-    ColorTheme.MIDNIGHT -> Midnight.scheme(dark = true)
+/** This theme's colours; [wallpaper] is used by the Wallpaper theme, which falls back to Violet without it. */
+internal fun ColorTheme.look(dark: Boolean, wallpaper: Look?): Look = when (this) {
+    ColorTheme.VIOLET -> if (dark) VioletDark else VioletLight
+    ColorTheme.PROFESSIONAL -> if (dark) ProfessionalDark else ProfessionalLight
+    ColorTheme.FOREST -> if (dark) ForestDark else ForestLight
+    ColorTheme.GRAPHITE -> if (dark) GraphiteDark else GraphiteLight
+    ColorTheme.WALLPAPER -> wallpaper ?: ColorTheme.VIOLET.look(dark, null)
+    ColorTheme.MIDNIGHT -> Midnight
 }
+
+@Composable
+fun ColorTheme.scheme(dark: Boolean): ColorScheme {
+    val wallpaper = if (this == ColorTheme.WALLPAPER) wallpaperLook(dark) else null
+    return look(dark, wallpaper).scheme(dark || darkOnly)
+}
+
+/** Whether the app is dark under [mode] when the phone is [systemDark]. */
+fun ColorTheme.isDark(mode: ThemeMode, systemDark: Boolean) = darkOnly || when (mode) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
+
+internal fun incomeColor(dark: Boolean) = if (dark) Color(0xFF3DDC97) else Color(0xFF12A36B)
+internal fun expenseColor(dark: Boolean) = if (dark) Color(0xFFFF7A7A) else Color(0xFFD93F3F)
 
 /** The colour themes this device can show. */
 @Composable
@@ -124,14 +139,9 @@ fun availableColorThemes(): List<ColorTheme> {
 
 @Composable
 fun TascaTheme(mode: ThemeMode, colorTheme: ColorTheme = ColorTheme.VIOLET, content: @Composable () -> Unit) {
-    val dark = colorTheme.darkOnly || when (mode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
+    val dark = colorTheme.isDark(mode, isSystemInDarkTheme())
     val colors = colorTheme.scheme(dark)
-    val money = if (dark) MoneyColors(Color(0xFF3DDC97), Color(0xFFFF7A7A), colors.primary)
-    else MoneyColors(Color(0xFF12A36B), Color(0xFFD93F3F), colors.primary)
+    val money = MoneyColors(incomeColor(dark), expenseColor(dark), colors.primary)
     SystemBarIcons(dark)
     androidx.compose.runtime.CompositionLocalProvider(LocalMoneyColors provides money) {
         MaterialTheme(
