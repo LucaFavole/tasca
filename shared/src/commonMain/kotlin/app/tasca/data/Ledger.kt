@@ -71,6 +71,21 @@ data class ImportResult(
     val newRecurring: Int = 0, val newBudgets: Int = 0, val fresh: Boolean = false,
 )
 
+/** What deleting an account does with its balance, so a deleted account does not leave it in the Total. */
+sealed interface Closing {
+    /** A transfer with [accountId] brings the balance to zero: that account pays a debt or receives what is left. The Total doesn't change. */
+    data class Settle(val accountId: Long) : Closing
+
+    /** The balance goes to zero with no transaction, so the Total changes by it. Its transactions stay in the history. */
+    data object WriteOff : Closing
+
+    /**
+     * Every transaction, regular payment and investment, and the opening balance, move to [accountId], and the
+     * account goes. Transfers between the two disappear, since they would go from an account to itself. The Total doesn't change.
+     */
+    data class MergeInto(val accountId: Long) : Closing
+}
+
 /** The single entry point for reading and changing the user's money data. */
 class Ledger(private val db: AppDb) {
     val dao = db.dao()
@@ -106,8 +121,34 @@ class Ledger(private val db: AppDb) {
     private fun nextCode(accounts: List<Account>) =
         "A" + ((accounts.mapNotNull { it.code.removePrefix("A").toIntOrNull() }.maxOrNull() ?: 0) + 1)
 
-    /** Removes an unused account; an account with history is hidden instead, so the Total and history stay intact. */
-    suspend fun deleteAccount(id: Long) = transaction {
+    /**
+     * Removes an unused account; an account with history is hidden instead, so its history stays intact.
+     * [closing] first deals with what it holds; without one, its balance stays in the Total. An account already
+     * deleted can be closed again this way, which is how a balance left in the Total is settled later.
+     */
+    suspend fun deleteAccount(id: Long, closing: Closing? = null, date: LocalDate = today()) = transaction {
+        when (closing) {
+            null -> Unit
+            is Closing.Settle -> {
+                val balance = dao.balance(id)
+                if (balance != 0L) dao.upsertTxn(Txn(
+                    kind = TxnKind.TRANSFER, amountCents = kotlin.math.abs(balance), date = date,
+                    accountId = if (balance > 0) id else closing.accountId,
+                    toAccountId = if (balance > 0) closing.accountId else id,
+                    note = "Account closed",
+                ))
+            }
+            Closing.WriteOff -> dao.addToOpening(id, -dao.balance(id))
+            is Closing.MergeInto -> {
+                val to = closing.accountId
+                dao.deleteTransfersBetween(id, to)
+                dao.deleteRecurringTransfersBetween(id, to)
+                dao.moveTxns(id, to)
+                dao.moveRecurring(id, to)
+                dao.moveHoldings(id, to)
+                dao.addToOpening(to, dao.accounts().first { it.id == id }.initialCents)
+            }
+        }
         if (dao.accountUsage(id) == 0 && dao.holdingCount(id) == 0) dao.removeAccount(id)
         else {
             dao.hideAccount(id)

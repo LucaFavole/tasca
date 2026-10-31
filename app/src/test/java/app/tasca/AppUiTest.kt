@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Application
 import android.content.Intent
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasScrollAction
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -194,6 +196,38 @@ class HomeBackTest {
         assertFalse(compose.activity.isFinishing)
         back()
         assertTrue("with nothing narrowed, Back leaves", compose.activity.isFinishing)
+    }
+}
+
+/** An account deleted while in debt stays listed under Accounts until its balance is paid from another account. */
+@OptIn(ExperimentalTestApi::class)
+@RunWith(AndroidJUnit4::class)
+@Config(application = Application::class, sdk = [34], qualifiers = "w411dp-h914dp-xxhdpi")
+class SettleDeletedAccountTest {
+    @get:Rule val compose = createEmptyComposeRule()
+
+    @Test fun aDebtLeftByADeletedAccountIsPaidFromMain() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        runBlocking {
+            val ledger = Ledger.get(app)
+            ledger.ensureSeeded()
+            val trip = ledger.saveAccount(Account(name = "Viaggio", color = 0))
+            val travel = ledger.dao.categories().first { it.name == "Viaggi" }.id
+            ledger.dao.upsertTxn(Txn(kind = TxnKind.EXPENSE, amountCents = 45_000, date = today(), accountId = trip, categoryId = travel))
+            ledger.deleteAccount(trip)
+        }
+        ActivityScenario.launch(MainActivity::class.java).use {
+            compose.waitUntilAtLeastOneExists(hasText("Accounts"), 30_000)
+            compose.onNodeWithText("Accounts").performClick()
+            compose.waitUntilAtLeastOneExists(hasText("Deleted, still counted in the Total"), 30_000)
+            compose.onNodeWithText("Viaggio").performClick()
+            compose.onNodeWithText("Pay it from another account").assertIsSelected()
+            compose.onNodeWithText("Main goes down by ${Money.format(45_000)}. The Total doesn't change.").assertExists()
+            compose.onNodeWithText("Settle").performClick()
+            compose.waitUntilDoesNotExist(hasText("Viaggio"), 30_000)
+            compose.onNodeWithText("Deleted, still counted in the Total").assertDoesNotExist()
+            compose.onAllNodesWithText(Money.format(-45_000)).assertCountEquals(2)
+        }
     }
 }
 

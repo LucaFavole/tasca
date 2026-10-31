@@ -6,6 +6,7 @@ import app.tasca.data.Account
 import app.tasca.data.AccountBalance
 import app.tasca.data.Budget
 import app.tasca.data.Category
+import app.tasca.data.Closing
 import app.tasca.data.Holding
 import app.tasca.data.Ledger
 import app.tasca.data.Recurring
@@ -277,8 +278,8 @@ class AppViewModel(private val ledger: Ledger, private val settings: Settings) :
     }
 
     fun saveAccount(a: Account) = io { ledger.saveAccount(a) }
-    fun deleteAccount(id: Long) = io {
-        ledger.deleteAccount(id)
+    fun deleteAccount(id: Long, closing: Closing? = null) = io {
+        ledger.deleteAccount(id, closing)
         if (selectedAccount.value == id) selectedAccount.value = null
     }
 

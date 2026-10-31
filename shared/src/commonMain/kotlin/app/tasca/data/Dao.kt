@@ -9,22 +9,24 @@ import kotlinx.datetime.LocalDate
 
 private const val ACCOUNT_FILTER = "(:accountId IS NULL OR t.accountId = :accountId)"
 
+/** The balance of account `a`: its opening balance plus every transaction in or out of it. */
+private const val BALANCE = """
+    a.initialCents + COALESCE((
+      SELECT SUM(CASE
+        WHEN t.kind = 'INCOME' THEN t.amountCents
+        WHEN t.kind = 'EXPENSE' THEN -t.amountCents
+        WHEN t.accountId = a.id THEN -t.amountCents
+        ELSE t.amountCents END)
+      FROM txn t WHERE t.accountId = a.id OR t.toAccountId = a.id), 0)
+"""
+
 @Dao
 interface LedgerDao {
-    @Query(
-        """
-        SELECT a.id, a.name, a.color, a.icon, a.initialCents, a.deleted, a.code,
-          a.initialCents + COALESCE((
-            SELECT SUM(CASE
-              WHEN t.kind = 'INCOME' THEN t.amountCents
-              WHEN t.kind = 'EXPENSE' THEN -t.amountCents
-              WHEN t.accountId = a.id THEN -t.amountCents
-              ELSE t.amountCents END)
-            FROM txn t WHERE t.accountId = a.id OR t.toAccountId = a.id), 0) AS balance
-        FROM account a ORDER BY a.deleted, a.id
-        """
-    )
+    @Query("SELECT a.id, a.name, a.color, a.icon, a.initialCents, a.deleted, a.code, $BALANCE AS balance FROM account a ORDER BY a.deleted, a.id")
     fun balances(): Flow<List<AccountBalance>>
+
+    @Query("SELECT $BALANCE FROM account a WHERE a.id = :id")
+    suspend fun balance(id: Long): Long
 
     @Query("SELECT * FROM account ORDER BY deleted, id")
     suspend fun accounts(): List<Account>
@@ -34,6 +36,30 @@ interface LedgerDao {
     @Query("UPDATE account SET deleted = 1 WHERE id = :id") suspend fun hideAccount(id: Long)
     @Query("SELECT COUNT(*) FROM txn WHERE accountId = :id OR toAccountId = :id") suspend fun accountUsage(id: Long): Int
     @Query("UPDATE recurring SET active = 0 WHERE accountId = :id OR toAccountId = :id") suspend fun pauseRecurringOf(id: Long)
+    @Query("UPDATE account SET initialCents = initialCents + :cents WHERE id = :id") suspend fun addToOpening(id: Long, cents: Long)
+
+    /** Transfers between [a] and [b], both ways: merging the two accounts would turn each into a transfer to itself. */
+    @Query("DELETE FROM txn WHERE kind = 'TRANSFER' AND ((accountId = :a AND toAccountId = :b) OR (accountId = :b AND toAccountId = :a))")
+    suspend fun deleteTransfersBetween(a: Long, b: Long)
+    @Query("DELETE FROM recurring WHERE kind = 'TRANSFER' AND ((accountId = :a AND toAccountId = :b) OR (accountId = :b AND toAccountId = :a))")
+    suspend fun deleteRecurringTransfersBetween(a: Long, b: Long)
+    @Query(
+        """
+        UPDATE txn SET accountId = CASE accountId WHEN :from THEN :to ELSE accountId END,
+          toAccountId = CASE toAccountId WHEN :from THEN :to ELSE toAccountId END
+        WHERE accountId = :from OR toAccountId = :from
+        """
+    )
+    suspend fun moveTxns(from: Long, to: Long)
+    @Query(
+        """
+        UPDATE recurring SET accountId = CASE accountId WHEN :from THEN :to ELSE accountId END,
+          toAccountId = CASE toAccountId WHEN :from THEN :to ELSE toAccountId END
+        WHERE accountId = :from OR toAccountId = :from
+        """
+    )
+    suspend fun moveRecurring(from: Long, to: Long)
+    @Query("UPDATE holding SET accountId = :to WHERE accountId = :from") suspend fun moveHoldings(from: Long, to: Long)
 
     @Query("SELECT * FROM category ORDER BY kind, name COLLATE NOCASE")
     fun categoriesFlow(): Flow<List<Category>>

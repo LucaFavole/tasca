@@ -3,9 +3,11 @@ package app.tasca
 import app.tasca.data.Account
 import app.tasca.data.Budget
 import app.tasca.data.CategoryKind
+import app.tasca.data.Closing
 import app.tasca.data.Defaults
 import app.tasca.data.Holding
 import app.tasca.data.Recurring
+import app.tasca.data.Txn
 import app.tasca.data.TxnKind
 import app.tasca.domain.Frequency
 import app.tasca.domain.TradeSide
@@ -99,6 +101,81 @@ class LedgerTest {
         ledger.deleteAccount(used)
         assertEquals(listOf("Main" to false, "Usato" to true), dao.accounts().map { it.name to it.deleted })
         assertFalse(dao.allRecurring().single().active)
+    }
+
+    private suspend fun total() = dao.balances().first().sumOf { it.balanceCents }
+
+    private suspend fun tripInDebt(): Pair<Long, Long> {
+        ledger.ensureSeeded()
+        val main = dao.accounts().single().id
+        val trip = ledger.saveAccount(Account(name = "Viaggio", color = 0))
+        dao.upsertTxn(Txn(kind = TxnKind.EXPENSE, amountCents = 45_000, date = day, accountId = trip, categoryId = expenseCategory("Viaggi")))
+        return main to trip
+    }
+
+    @Test fun closingAnAccountInDebtPaysItFromAnotherAndKeepsTheTotal() = runTest {
+        val (main, trip) = tripInDebt()
+        val before = total()
+        ledger.deleteAccount(trip, Closing.Settle(main), day)
+        assertEquals(mapOf("Main" to -45_000L, "Viaggio" to 0L), balances())
+        assertEquals(before, total())
+        assertTrue(dao.accounts().first { it.id == trip }.deleted)
+        val paid = dao.allTxns().single { it.kind == TxnKind.TRANSFER }
+        assertEquals(listOf(main, trip, 45_000L), listOf(paid.accountId, paid.toAccountId, paid.amountCents))
+    }
+
+    @Test fun closingAnAccountWithMoneyLeftMovesItToAnother() = runTest {
+        ledger.ensureSeeded()
+        val main = dao.accounts().single().id
+        val jar = ledger.saveAccount(Account(name = "Salvadanaio", color = 0, initialCents = 3_000))
+        ledger.deleteAccount(jar, Closing.Settle(main), day)
+        assertEquals(mapOf("Main" to 3_000L, "Salvadanaio" to 0L), balances())
+        assertEquals(jar, dao.allTxns().single().accountId)
+    }
+
+    @Test fun aBalanceLeftByAnEarlierDeleteCanBeWrittenOff() = runTest {
+        val (_, trip) = tripInDebt()
+        ledger.deleteAccount(trip)
+        assertEquals(-45_000L, total(), "an account deleted with no closing keeps its balance in the Total")
+        ledger.deleteAccount(trip, Closing.WriteOff, day)
+        assertEquals(0L, total())
+        assertEquals(mapOf("Main" to 0L, "Viaggio" to 0L), balances())
+        assertTrue(dao.accounts().first { it.id == trip }.deleted)
+        assertEquals(listOf(45_000L), dao.allTxns().map { it.amountCents }, "its expense stays in the history")
+    }
+
+    @Test fun mergingMovesEverythingAndDropsTheTransfersBetweenTheTwo() = runTest {
+        val (main, trip) = tripInDebt()
+        val card = ledger.saveAccount(Account(name = "Carta", color = 0))
+        dao.upsertAccount(dao.accounts().first { it.id == trip }.copy(initialCents = 10_000))
+        val salary = dao.categories().first { it.kind == CategoryKind.INCOME && it.name == "Stipendio" }.id
+        dao.upsertTxn(Txn(kind = TxnKind.INCOME, amountCents = 5_000, date = day, accountId = trip, categoryId = salary))
+        dao.upsertTxn(Txn(kind = TxnKind.TRANSFER, amountCents = 8_000, date = day, accountId = main, toAccountId = trip))
+        dao.upsertTxn(Txn(kind = TxnKind.TRANSFER, amountCents = 2_000, date = day, accountId = trip, toAccountId = card))
+        dao.upsertRecurring(Recurring(
+            name = "Hotel", kind = TxnKind.EXPENSE, amountCents = 1_000, accountId = trip, categoryId = expenseCategory("Viaggi"),
+            frequency = Frequency.MONTHLY, startDate = LocalDate(2027, 1, 1),
+        ))
+        dao.upsertRecurring(Recurring(
+            name = "Ricarica", kind = TxnKind.TRANSFER, amountCents = 1_000, accountId = main, toAccountId = trip,
+            frequency = Frequency.MONTHLY, startDate = LocalDate(2027, 1, 1),
+        ))
+        dao.upsertHolding(Holding(accountId = trip, symbol = "SPYY.DE", name = "SPDR ACWI", quantity = 1.0, investedCents = 1_000))
+        val before = balances()
+        val total = total()
+
+        ledger.deleteAccount(trip, Closing.MergeInto(main), day)
+
+        assertEquals(mapOf("Main" to before.getValue("Main") + before.getValue("Viaggio"), "Carta" to 2_000L), balances())
+        assertEquals(total, total())
+        assertEquals(listOf("Main", "Carta"), dao.accounts().map { it.name }, "the merged account goes")
+        assertEquals(
+            setOf(Triple(TxnKind.EXPENSE, main, null), Triple(TxnKind.INCOME, main, null), Triple(TxnKind.TRANSFER, main, card)),
+            dao.allTxns().map { Triple(it.kind, it.accountId, it.toAccountId) }.toSet(),
+        )
+        assertEquals(listOf("Hotel" to main), dao.allRecurring().map { it.name to it.accountId })
+        assertTrue(dao.allRecurring().single().active)
+        assertEquals(main, dao.holdings().single().accountId)
     }
 
     @Test fun aSaleBooksFeeTaxAndGain() = runTest {
